@@ -96,3 +96,29 @@ def crear_titular(db: Session, email: str = "titular@frubber.co", password: str 
 def iniciar_sesion(client: TestClient, email: str, password: str) -> None:
     response = client.post("/login", data={"email": email, "password": password}, follow_redirects=False)
     assert response.status_code == 303, f"Login inesperado: {response.status_code} {response.text}"
+
+
+def crear_usuario_rol(
+    db: Session,
+    rol: str,
+    *,
+    email: str | None = None,
+    password: str = "clave-larga-suficiente",
+    nombre: str = "Persona de Prueba",
+    activo: bool = True,
+) -> User:
+    """Helper: crea una cuenta con el rol indicado, hasheada de verdad."""
+    from license_manager.models import User
+    from license_manager.security.passwords import hash_password
+
+    user = User(
+        nombre_completo=nombre,
+        email=email or f"{rol}@frubber.co",
+        password_hash=hash_password(password),
+        rol=rol,
+        activo=activo,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user

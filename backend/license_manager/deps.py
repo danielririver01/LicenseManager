@@ -20,7 +20,7 @@ from starlette.exceptions import HTTPException
 from license_manager.config import Settings
 from license_manager.crypto.keys import SigningKey, SigningKeyUnavailable, load_signing_key
 from license_manager.db import build_engine as _build_engine
-from license_manager.models import User
+from license_manager.models import Role, User
 from license_manager.security.sessions import SessionManager
 
 
@@ -96,3 +96,25 @@ def get_current_user(request: Request, db: Session = Depends(get_db_session)) ->
     manager = get_session_manager()
     cookie = request.cookies.get(manager.cookie_name)
     return manager.resolve(db, cookie)
+
+
+def require_titular(request: Request, db: Session = Depends(get_db_session)) -> User:
+    """Bloqueo 403 estricto para la gestion de cuentas (UI-09).
+
+    Diferencia deliberate con ``get_current_user``: aqui no hay redireccion a
+    /login ni salida parcial. Un administrador delegado que llegue a estos
+    endpoints recibe 403 con el mismo cuerpo uniforme que el resto del sitio,
+    sin revelar si la ruta existe o que habria contenido.
+    """
+    user = get_current_user(request, db)
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Debe iniciar sesion para realizar esta accion.",
+        )
+    if not Role(user.rol).is_titular:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo el Titular Principal y el Co-Titular pueden gestionar cuentas.",
+        )
+    return user

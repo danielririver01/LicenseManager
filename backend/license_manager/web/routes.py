@@ -13,6 +13,7 @@ publica, que de por si es publica.
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -20,15 +21,31 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from license_manager.deps import get_current_user, get_db_session, get_session_manager, state
-from license_manager.models import Equipment, Income, License, User
+from license_manager.deps import (
+    get_current_user,
+    get_db_session,
+    get_session_manager,
+    require_titular,
+    state,
+)
+from license_manager.models import Equipment, Income, License, Role, User
 from license_manager.security.passwords import (
     PasswordTooWeak,
     hash_password,
     validate_password_strength,
     verify_password,
 )
+from license_manager.security.sessions import SessionManager
 from license_manager.services.audit import record_event
+from license_manager.services.users import (
+    UserManagementError,
+    change_own_password,
+    create_user,
+    list_operators,
+    reset_password,
+    rol_etiqueta,
+    set_user_active,
+)
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "web" / "templates"
 templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
@@ -280,3 +297,215 @@ def verificar_auditoria(db: Session = Depends(get_db_session)):
 
     result = verify_chain(db)
     return {"ok": result.ok, "total_eventos": result.total_events, "detalle": result.reason}
+
+
+# --------------------------------------------------------------------------- #
+# Gestion de administradores (UI-09, JHO-99) - exclusivo de Titulares
+# --------------------------------------------------------------------------- #
+
+
+@pages_router.get("/administradores", response_class=HTMLResponse)
+def administradores_page(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    aviso: str | None = None,
+    error: str | None = None,
+):
+    user = get_current_user(request, db)
+    request.state.user = user
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+
+    # Bloqueo 403 estricto y visible: el administrador delegado ve la tarjeta
+    # de acceso restringido con estado 403, no una lista vacia ni un redirect
+    # que oculte que la pantalla existe.
+    if not Role(user.rol).is_titular:
+        return _render(
+            request,
+            "administradores.html",
+            {"acceso_denegado": True, "operadores": [], "aviso": None, "error": None},
+            status_code=403,
+        )
+
+    return _render(
+        request,
+        "administradores.html",
+        {
+            "acceso_denegado": False,
+            "operadores": list_operators(db),
+            "aviso": aviso,
+            "error": error,
+            "rol_etiqueta": rol_etiqueta,
+            "seccion": "administradores",
+        },
+    )
+
+
+def _admin_redirect(aviso: str | None = None, error: str | None = None) -> RedirectResponse:
+    destino = "/administradores"
+    if aviso:
+        destino += f"?aviso={quote(aviso)}"
+    elif error:
+        destino += f"?error={quote(error)}"
+    return RedirectResponse(destino, status_code=303)
+
+
+@pages_router.post("/administradores/crear")
+def crear_usuario(
+    request: Request,
+    nombre: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(..., alias="password"),
+    rol: str = Form(...),
+    user: User = Depends(require_titular),
+    db: Session = Depends(get_db_session),
+):
+    try:
+        nuevo = create_user(
+            db, actor=user, nombre=nombre, email=email, password=password, rol=rol
+        )
+    except UserManagementError as exc:
+        db.rollback()
+        return _admin_redirect(error=str(exc))
+
+    record_event(
+        db,
+        action="usuario.creado",
+        user=user,
+        entity_type="usuario",
+        entity_id=nuevo.id,
+        # Nunca se registra la contrasena, ni hasheada ni en claro.
+        detail={"rol": nuevo.rol, "email_creado": nuevo.email},
+    )
+    db.commit()
+    etiqueta = rol_etiqueta(nuevo.rol)
+    return _admin_redirect(aviso=f"Cuenta de {etiqueta} creada: {nuevo.nombre_completo}.")
+
+
+@pages_router.post("/administradores/{user_id}/alternar")
+def alternar_usuario(
+    request: Request,
+    user_id: str,
+    activo: str = Form(...),
+    user: User = Depends(require_titular),
+    db: Session = Depends(get_db_session),
+    sessions: SessionManager = Depends(get_session_manager),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        return _admin_redirect(error="La cuenta solicitada no existe.")
+
+    deseado = activo in ("1", "true", "True", "on")
+    try:
+        revocadas = set_user_active(
+            db, sessions, actor=user, target=target, active=deseado
+        )
+    except UserManagementError as exc:
+        db.rollback()
+        return _admin_redirect(error=str(exc))
+
+    record_event(
+        db,
+        action="usuario.activado" if deseado else "usuario.desactivado",
+        user=user,
+        entity_type="usuario",
+        entity_id=target.id,
+        # El email del operador queda congelado en la auditoria aunque despues
+        # se desactive o salga de la empresa: eso es lo que exige UI-09.
+        detail={"email_afectado": target.email, "rol": target.rol, "sesiones_revocadas": revocadas},
+    )
+    db.commit()
+
+    if deseado:
+        return _admin_redirect(aviso=f"Cuenta de {target.nombre_completo} activada.")
+    return _admin_redirect(
+        aviso=(
+            f"Cuenta de {target.nombre_completo} desactivada. "
+            f"Se cerraron {revocadas} sesion(es); su historial se conserva."
+        )
+    )
+
+
+@pages_router.post("/administradores/{user_id}/restablecer")
+def restablecer_clave(
+    request: Request,
+    user_id: str,
+    password: str = Form(..., alias="password"),
+    user: User = Depends(require_titular),
+    db: Session = Depends(get_db_session),
+    sessions: SessionManager = Depends(get_session_manager),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        return _admin_redirect(error="La cuenta solicitada no existe.")
+
+    try:
+        revocadas = reset_password(
+            db, sessions, actor=user, target=target, new_password=password
+        )
+    except UserManagementError as exc:
+        db.rollback()
+        return _admin_redirect(error=str(exc))
+
+    record_event(
+        db,
+        action="usuario.clave_restablecida",
+        user=user,
+        entity_type="usuario",
+        entity_id=target.id,
+        # Solo el conteo: la clave y su hash jamas salen de aqui.
+        detail={"email_afectado": target.email, "sesiones_revocadas": revocadas},
+    )
+    db.commit()
+    return _admin_redirect(
+        aviso=(
+            f"Clave de {target.nombre_completo} restablecida. "
+            f"Se cerraron {revocadas} sesion(es); debe usar la clave nueva."
+        )
+    )
+
+
+@pages_router.post("/seguridad/mi-clave")
+def cambiar_mi_clave(
+    request: Request,
+    password_actual: str = Form(..., alias="password_actual"),
+    password_nueva: str = Form(..., alias="password_nueva"),
+    password_confirmacion: str = Form(..., alias="password_confirmacion"),
+    user: User = Depends(require_titular),
+    db: Session = Depends(get_db_session),
+    sessions: SessionManager = Depends(get_session_manager),
+):
+    try:
+        nueva_cookie = change_own_password(
+            db,
+            sessions,
+            user=user,
+            current_password=password_actual,
+            new_password=password_nueva,
+            new_password_confirm=password_confirmacion,
+        )
+    except UserManagementError as exc:
+        db.rollback()
+        # Cambio de clave propio: se vuelve a la pantalla con el error, nunca
+        # se confirma un cambio que no se efectuo.
+        return RedirectResponse(
+            f"/administradores?error={quote(str(exc))}", status_code=303
+        )
+
+    record_event(
+        db,
+        action="usuario.clave_propia_cambiada",
+        user=user,
+        entity_type="usuario",
+        entity_id=user.id,
+        detail={"sesiones_cerradas_anteriores": True},
+    )
+    db.commit()
+
+    aviso_clave = quote("Su clave fue actualizada.")
+    response = RedirectResponse(f"/administradores?aviso={aviso_clave}", status_code=303)
+    # Se borra la cookie vieja antes de emitir la nueva: si algo falla en el
+    # medio, no queda una sesion a medias.
+    _clear_session_cookie(response)
+    _set_session_cookie(response, nueva_cookie)
+    return response

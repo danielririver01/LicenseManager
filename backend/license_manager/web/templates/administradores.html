@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+{% block titulo %}Administradores · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  {% if acceso_denegado %}
+  <div class="tarjeta acceso-restringido">
+    <div class="icono">&#128274;</div>
+    <h1 class="titulo" style="font-size:18px">Acceso restringido &mdash; Error 403</h1>
+    <p class="subtitulo" style="max-width:460px;margin:8px auto 0">
+      Esta seccion es de uso exclusivo del Titular de License Manager. Los
+      administradores delegados no pueden ver ni gestionar cuentas de usuario.
+    </p>
+    <p style="margin-top:22px"><a class="btn btn-secundario" href="/">Volver al panel</a></p>
+  </div>
+
+  {% else %}
+  <h1 class="titulo">Gestion de Administradores y Seguridad</h1>
+  <p class="subtitulo">
+    Crea cuentas individuales para tus operadores o socios y gestiona la
+    seguridad del sistema.
+  </p>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  <!-- Panel exclusivo de seguridad del Titular -->
+  {% if current_user.rol == 'owner' %}
+  <div class="tarjeta" style="margin-bottom:20px">
+    <div class="panel-titular">
+      <div class="cuerpo">
+        <div class="icono">&#128272;</div>
+        <div>
+          <div style="font-size:14px;font-weight:700">
+            Seguridad del Titular Principal ({{ current_user.nombre_completo }})
+          </div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+            Tu cuenta custodia la llave criptografica. Actualiza tu contrasena
+            cuando quieras: se exige la clave actual y se cierran las demas
+            sesiones al instante.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <form method="post" action="/seguridad/mi-clave" style="margin-top:18px;border-top:1px solid var(--border-subtle);padding-top:18px">
+      <h2 style="font-size:14px;margin-bottom:14px">Cambiar mi contrasena</h2>
+      <div class="form-grid">
+        <div class="campo">
+          <label for="password_actual">Contrasena actual *</label>
+          <input type="password" id="password_actual" name="password_actual" required autocomplete="current-password">
+        </div>
+        <div class="campo">
+          <label for="password_nueva">Nueva contrasena *</label>
+          <input type="password" id="password_nueva" name="password_nueva" required autocomplete="new-password">
+          <p class="pista">Minimo 10 caracteres.</p>
+        </div>
+        <div class="campo">
+          <label for="password_confirmacion">Confirmar nueva contrasena *</label>
+          <input type="password" id="password_confirmacion" name="password_confirmacion" required autocomplete="new-password">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primario">Guardar nueva contrasena</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="aviso-reglas">
+    <strong>Reglas de control del Titular:</strong>
+    los administradores activos pueden registrar clientes y emitir licencias,
+    pero <strong>no tienen acceso a esta pantalla</strong>. Al desactivar a un
+    administrador se revoca su inicio de sesion al instante, pero
+    <strong>todas sus emisiones historicas quedan registradas a su nombre</strong>
+    para auditoria.
+  </div>
+
+  <!-- Tabla de operadores -->
+  <div class="tabla-envoltura">
+    <div class="tabla-scroll">
+      <table class="tabla-operadores">
+        <thead>
+          <tr>
+            <th>Nombre del Operador</th>
+            <th>Correo de Acceso</th>
+            <th>Rol</th>
+            <th>Estado</th>
+            <th>Licencias Emitidas</th>
+            <th>Fecha de Alta</th>
+            <th>Acciones del Titular</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for op in operadores %}
+          <tr class="{{ 'fila-titular' if op.es_titular else '' }}">
+            <td>
+              <div class="fila-nombre">{{ op.nombre }}</div>
+              {% if op.es_titular %}<div class="fila-sub">Cuenta principal protegida</div>
+              {% else %}<div class="fila-sub">Operador de emision</div>{% endif %}
+            </td>
+            <td><span class="correo">{{ op.email }}</span></td>
+            <td>
+              {% if op.rol == 'owner' %}<span class="badge badge-azul">Titular</span>
+              {% elif op.rol == 'coowner' %}<span class="badge badge-azul">Co-Titular</span>
+              {% else %}<span class="badge badge-gris">Administrador</span>{% endif %}
+            </td>
+            <td>
+              {% if op.activo %}<span class="badge badge-verde">Activo</span>
+              {% else %}<span class="badge badge-gris">Desactivado</span>{% endif %}
+            </td>
+            <td>{{ op.licencias_emitidas }}</td>
+            <td>{{ op.creado_at.strftime('%d/%m/%Y') if op.creado_at else '—' }}</td>
+            <td>
+              {% if op.rol == 'owner' %}
+                <span class="notilla">Solo cambia su propia clave arriba</span>
+
+              {% else %}
+                <form class="accion-form" method="post" action="/administradores/{{ op.id }}/restablecer">
+                  <button type="submit" class="btn-fila"
+                          onclick="return confirm('Restablecer la clave de {{ op.nombre }}? Se cerraran sus sesiones.')">
+                    Restablecer clave
+                  </button>
+                </form>
+
+                {% if op.id != current_user.id %}
+                <form class="accion-form" method="post" action="/administradores/{{ op.id }}/alternar">
+                  <input type="hidden" name="activo" value="{{ '0' if op.activo else '1' }}">
+                  {% if op.activo %}
+                  <button type="submit" class="btn-fila peligro"
+                          onclick="return confirm('Desactivar a {{ op.nombre }}? Perdera el acceso de inmediato; su historial se conserva.')">
+                    Desactivar
+                  </button>
+                  {% else %}
+                  <button type="submit" class="btn-fila activo"
+                          onclick="return confirm('Reactivar la cuenta de {{ op.nombre }}?')">
+                    Activar cuenta
+                  </button>
+                  {% endif %}
+                </form>
+                {% else %}
+                <span class="notilla">No puede desactivarse a si mismo</span>
+                {% endif %}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alta de cuenta -->
+  <div class="tarjeta" style="margin-top:20px">
+    <h2>Crear nuevo usuario</h2>
+    <form method="post" action="/administradores/crear">
+      <div class="form-grid">
+        <div class="campo">
+          <label for="rol">Tipo de usuario a crear *</label>
+          <select id="rol" name="rol">
+            <option value="admin">Administrador Delegado (operador de campo)</option>
+            {% if current_user.rol == 'owner' %}
+            <option value="coowner">Co-Titular / Socio (acceso total)</option>
+            {% endif %}
+          </select>
+          <p class="pista">
+            El administrador delegado registra clientes y emite licencias, pero no
+            gestiona usuarios. Solo el Titular Principal puede crear un Co-Titular.
+          </p>
+        </div>
+        <div class="campo">
+          <label for="nombre">Nombre completo *</label>
+          <input type="text" id="nombre" name="nombre" required placeholder="Ej. Juan Perez">
+        </div>
+        <div class="campo">
+          <label for="email">Correo electronico (inicio de sesion) *</label>
+          <input type="email" id="email" name="email" required placeholder="juan.perez@frubber.local">
+        </div>
+        <div class="campo">
+          <label for="password">Contrasena inicial *</label>
+          <input type="password" id="password" name="password" required autocomplete="new-password">
+          <p class="pista">Minimo 10 caracteres.</p>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primario">Crear usuario</button>
+    </form>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}
