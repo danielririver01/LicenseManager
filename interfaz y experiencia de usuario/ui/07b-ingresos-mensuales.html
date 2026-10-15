@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — Ingresos Mensuales y Cierres (COP)</title>
+  <style>
+    :root {
+      /* Paleta Kirito */
+      --azul-noche: #101828;
+      --azul-electrico: #2563eb;
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;
+      --verde-activo: #16a34a;
+      --ambar-alerta: #d97706;
+      --rojo-vencido: #dc2626;
+      
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-sidebar: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --sidebar-width: 250px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--blanco-frio);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* Backdrop overlay */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 24, 40, 0.6);
+      backdrop-filter: blur(2px);
+      z-index: 140;
+    }
+
+    /* Sidebar Navigation — Azul noche #101828 */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--azul-noche);
+      border-right: 1px solid var(--border-sidebar);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 150;
+      color: #ffffff;
+    }
+
+    .brand {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--border-sidebar);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-sub {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    .close-sidebar-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .nav-list {
+      list-style: none;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+
+    .nav-item a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .nav-item a:hover {
+      background: #1e293b;
+      color: #ffffff;
+    }
+
+    .nav-item.active a {
+      background: var(--azul-electrico);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .nav-item.titular-only {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+
+    .tag-role {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(217, 119, 6, 0.25);
+      color: #fbbf24;
+      font-weight: 700;
+      margin-left: auto;
+    }
+
+    .user-profile {
+      padding: 16px;
+      border-top: 1px solid var(--border-sidebar);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      color: #38bdf8;
+    }
+
+    .user-info {
+      flex-grow: 1;
+      overflow: hidden;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-role-text {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex-grow: 1;
+      padding: 32px 40px;
+      overflow-y: auto;
+      max-width: 1300px;
+    }
+
+    .mobile-header-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .hamburger-btn {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 24px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      letter-spacing: -0.02em;
+    }
+
+    .page-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Month Selector Widget */
+    .month-picker-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      padding: 6px 14px;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .month-btn-nav {
+      background: #f1f5f9;
+      border: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      color: var(--azul-noche);
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .month-btn-nav:hover {
+      background: #e2e8f0;
+    }
+
+    .current-month-display {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      min-width: 140px;
+      text-align: center;
+    }
+
+    /* KPI Summary Cards */
+    .monthly-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .kpi-amount {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--azul-noche);
+      line-height: 1.1;
+    }
+
+    .kpi-foot {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Visual Bar Chart Comparison */
+    .chart-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .chart-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--azul-noche);
+    }
+
+    .chart-bars-container {
+      display: flex;
+      align-items: flex-end;
+      gap: 24px;
+      height: 180px;
+      padding: 10px 10px 0;
+      border-bottom: 2px solid var(--border-subtle);
+    }
+
+    .bar-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100%;
+      justify-content: flex-end;
+      position: relative;
+    }
+
+    .bar-fill {
+      width: 100%;
+      max-width: 48px;
+      border-radius: 6px 6px 0 0;
+      background: #e2e8f0;
+      transition: height 0.3s ease;
+      position: relative;
+    }
+
+    .bar-fill.active {
+      background: var(--azul-electrico);
+    }
+
+    .bar-fill.highest {
+      background: var(--verde-activo);
+    }
+
+    .bar-val-bubble {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      margin-bottom: 6px;
+      text-align: center;
+    }
+
+    .bar-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* Detailed Breakdown Layout */
+    .breakdown-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+    }
+
+    .section-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .card-header-clean {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card-title-clean {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--azul-noche);
+    }
+
+    .table-container {
+      overflow-x: auto;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 12px;
+    }
+
+    .data-table th {
+      background: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+
+    .data-table td {
+      padding: 13px 18px;
+      border-bottom: 1px solid #f1f5f9;
+      color: var(--text-main);
+      white-space: nowrap;
+    }
+
+    .data-table tr:hover td {
+      background: #f8fafc;
+    }
+
+    .badge-paid {
+      background: #dcfce7;
+      color: var(--verde-activo);
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    /* Right column: Resumen de auditoría */
+    .summary-list {
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+
+    .summary-row-label {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .summary-row-val {
+      color: var(--azul-noche);
+      font-weight: 700;
+    }
+
+    .divider-line {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 4px 0;
+    }
+
+    .btn-export {
+      background: #f8fafc;
+      border: 1px solid var(--border-subtle);
+      color: var(--azul-noche);
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-export:hover {
+      background: #e2e8f0;
+    }
+
+    /* Responsive */
+    @media (max-width: 950px) {
+      .monthly-kpis {
+        grid-template-columns: 1fr 1fr;
+      }
+      .breakdown-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .sidebar-overlay.active {
+        display: block;
+      }
+      .close-sidebar-btn {
+        display: block;
+      }
+      .mobile-header-bar {
+        display: flex;
+      }
+      .main-content {
+        padding: 16px;
+      }
+      .header-bar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .monthly-kpis {
+        grid-template-columns: 1fr;
+      }
+      .chart-bars-container {
+        gap: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+
+  <!-- Sidebar Kirito -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div>
+        <div class="brand-title">
+          <span style="color: var(--azul-electrico);">◆</span> FRUBBER
+        </div>
+        <div class="brand-sub">License Manager · Intranet</div>
+      </div>
+      <button class="close-sidebar-btn" onclick="toggleSidebar(false)">✕</button>
+    </div>
+
+    <ul class="nav-list">
+      <li class="nav-item">
+        <a href="#panel">
+          <span>📊</span> Resumen / Panel
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#clientes">
+          <span>🏢</span> Verdulerías / Clientes
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#licencias">
+          <span>🔑</span> Equipos y Licencias
+        </a>
+      </li>
+      <li class="nav-item active">
+        <a href="#ingresos">
+          <span>💵</span> Ingresos y Cobros
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#historial">
+          <span>🕒</span> Historial de cambios
+        </a>
+      </li>
+      <li class="nav-item titular-only">
+        <a href="#administradores">
+          <span>👥</span> Administradores
+          <span class="tag-role">Titular</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#configuracion">
+          <span>⚙</span> Configuración
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#respaldo">
+          <span>🛡</span> Respaldo
+        </a>
+      </li>
+    </ul>
+
+    <div class="user-profile">
+      <div class="user-avatar">DR</div>
+      <div class="user-info">
+        <div class="user-name">Daniel Rivera</div>
+        <div class="user-role-text">Titular de la cuenta</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="mobile-header-bar">
+      <button class="hamburger-btn" onclick="toggleSidebar(true)">☰ Menú</button>
+      <div style="font-size: 13px; font-weight: 700; color: var(--azul-noche);">FRUBBER · License Manager</div>
+    </div>
+
+    <div class="header-bar">
+      <div>
+        <h1 class="page-title">Ingresos Mensuales y Cierres</h1>
+        <p class="page-desc">Consolidado mensual de licencias cobradas en pesos colombianos (COP), promedios y comparativa histórica.</p>
+      </div>
+
+      <!-- Selector de Mes / Año -->
+      <div class="month-picker-bar">
+        <button class="month-btn-nav" onclick="changeMonth(-1)">‹</button>
+        <div class="current-month-display" id="month-label">Octubre 2026</div>
+        <button class="month-btn-nav" onclick="changeMonth(1)">›</button>
+      </div>
+    </div>
+
+    <!-- 4 Tarjetas de Métricas del Mes Seleccionado -->
+    <div class="monthly-kpis">
+      <div class="kpi-card">
+        <div class="kpi-label">Ingresos Totales (Mes)</div>
+        <div class="kpi-amount" style="color: var(--verde-activo);" id="kpi-total">$ 3.600.000 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span></div>
+        <div class="kpi-foot">
+          <span style="color: var(--verde-activo); font-weight: 700;">↑ +28%</span> vs mes anterior
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-label">Licencias Cobradas</div>
+        <div class="kpi-amount" id="kpi-count">8 <span style="font-size: 14px; font-weight: 600; color: var(--text-muted);">licencias</span></div>
+        <div class="kpi-foot">
+          <span>Tarifa estándar: $ 450.000 COP</span>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-label">Cobros Pendientes</div>
+        <div class="kpi-amount" style="color: var(--ambar-alerta);" id="kpi-pending">$ 450.000 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span></div>
+        <div class="kpi-foot">
+          <span>1 verdulería en gracia (Día 31)</span>
+        </div>
+      </div>
+
+      <div class="kpi-card">
+        <div class="kpi-label">Reemplazos / Cortesías</div>
+        <div class="kpi-amount" style="color: var(--text-muted);" id="kpi-free">2 <span style="font-size: 14px; font-weight: 600; color: var(--text-muted);">equipos</span></div>
+        <div class="kpi-foot">
+          <span>Sin costo ($ 0 COP segregado)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gráfico Comparativo Semestral en Barras Limpias -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">Comportamiento Semestral de Ingresos (COP)</div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Cierres mensuales en base de datos local</div>
+        </div>
+        <button class="btn-export" onclick="alert('Exportando resumen mensual en CSV/PDF...')">
+          <span>📥</span> Exportar cierre
+        </button>
+      </div>
+
+      <div class="chart-bars-container">
+        <!-- Mayo -->
+        <div class="bar-col">
+          <div class="bar-val-bubble">$ 1.8M</div>
+          <div class="bar-fill" style="height: 45%;"></div>
+          <div class="bar-label">May</div>
+        </div>
+        <!-- Junio -->
+        <div class="bar-col">
+          <div class="bar-val-bubble">$ 2.25M</div>
+          <div class="bar-fill" style="height: 55%;"></div>
+          <div class="bar-label">Jun</div>
+        </div>
+        <!-- Julio -->
+        <div class="bar-col">
+          <div class="bar-val-bubble">$ 2.7M</div>
+          <div class="bar-fill" style="height: 65%;"></div>
+          <div class="bar-label">Jul</div>
+        </div>
+        <!-- Agosto -->
+        <div class="bar-col">
+          <div class="bar-val-bubble">$ 2.25M</div>
+          <div class="bar-fill" style="height: 55%;"></div>
+          <div class="bar-label">Ago</div>
+        </div>
+        <!-- Septiembre -->
+        <div class="bar-col">
+          <div class="bar-val-bubble">$ 2.8M</div>
+          <div class="bar-fill" style="height: 70%;"></div>
+          <div class="bar-label">Sep</div>
+        </div>
+        <!-- Octubre (Mes actual) -->
+        <div class="bar-col">
+          <div class="bar-val-bubble" style="color: var(--azul-electrico); font-weight: 800;">$ 3.6M</div>
+          <div class="bar-fill active" style="height: 90%;"></div>
+          <div class="bar-label" style="color: var(--azul-electrico); font-weight: 700;">Oct (Hoy)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Desglose de Ventas del Mes vs Resumen de Auditoría -->
+    <div class="breakdown-grid">
+      <!-- Tabla de licencias cobradas en el mes -->
+      <div class="section-card">
+        <div class="card-header-clean">
+          <div class="card-title-clean">Detalle de Cobros del Mes (<span id="table-month-name">Octubre 2026</span>)</div>
+          <span style="font-size: 11px; color: var(--text-muted);">8 transacciones</span>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Verdulería / Negocio</th>
+                <th>Código Equipo</th>
+                <th>Importe</th>
+                <th>Registró</th>
+              </tr>
+            </thead>
+            <tbody id="table-rows">
+              <tr>
+                <td>15/10/2026</td>
+                <td><strong>Verdulería La Huerta Central</strong></td>
+                <td><code>A4B9-C102-E8F3</code></td>
+                <td><strong style="color: var(--azul-noche);">$ 450.000 COP</strong></td>
+                <td>Daniel Rivera</td>
+              </tr>
+              <tr>
+                <td>13/10/2026</td>
+                <td><strong>Frutas El Manantial</strong></td>
+                <td><code>5D21-98AF-44B1</code></td>
+                <td><strong style="color: var(--azul-noche);">$ 450.000 COP</strong></td>
+                <td>Carlos Gómez</td>
+              </tr>
+              <tr>
+                <td>11/10/2026</td>
+                <td><strong>Verduras Don Pedro</strong></td>
+                <td><code>77C1-E40B-9920</code></td>
+                <td><strong style="color: var(--azul-noche);">$ 450.000 COP</strong></td>
+                <td>Daniel Rivera</td>
+              </tr>
+              <tr>
+                <td>09/10/2026</td>
+                <td><strong>Distribuidora Frutimax</strong></td>
+                <td><code>F110-B882-01CA</code></td>
+                <td><strong style="color: var(--azul-noche);">$ 450.000 COP</strong></td>
+                <td>Carlos Gómez</td>
+              </tr>
+              <tr>
+                <td>06/10/2026</td>
+                <td><strong>El Rincón del Tomate</strong></td>
+                <td><code>3B10-44F2-81D0</code></td>
+                <td><strong style="color: var(--azul-noche);">$ 450.000 COP</strong></td>
+                <td>Daniel Rivera</td>
+              </tr>
+              <tr>
+                <td>04/10/2026</td>
+                <td><strong>Frutas y Legumbres San José</strong></td>
+                <td><code>99A2-11C0-77E5</code></td>
+                <td><strong style="color: var(--azul-noche);">$ 450.000 COP</strong></td>
+                <td>Carlos Gómez</td>
+              </tr>
+              <tr>
+                <td>02/10/2026</td>
+                <td><strong>Supermercado Campestre</strong></td>
+                <td><code>44E1-88F9-22B3</code></td>
+                <td><strong style="color: var(--azul-noche);">$ 450.000 COP</strong></td>
+                <td>Daniel Rivera</td>
+              </tr>
+              <tr>
+                <td>01/10/2026</td>
+                <td><strong>La Cosecha Fresca</strong></td>
+                <td><code>11C4-00A9-55E8</code></td>
+                <td><strong style="color: var(--azul-noche);">$ 450.000 COP</strong></td>
+                <td>Daniel Rivera</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Resumen de Cierre Financiero (Auditoría Titular) -->
+      <div class="section-card">
+        <div class="card-header-clean">
+          <div class="card-title-clean">Cierre y Liquidación Mensual</div>
+          <span class="badge-paid">Auditoría OK</span>
+        </div>
+        <div class="summary-list">
+          <div class="summary-row">
+            <span class="summary-row-label">Total ventas brutas:</span>
+            <span class="summary-row-val">$ 3.600.000 COP</span>
+          </div>
+
+          <div class="summary-row">
+            <span class="summary-row-label">Cobrado por Daniel (Titular):</span>
+            <span class="summary-row-val">$ 2.250.000 COP (5 lic.)</span>
+          </div>
+
+          <div class="summary-row">
+            <span class="summary-row-label">Cobrado por Carlos (Admin):</span>
+            <span class="summary-row-val">$ 1.350.000 COP (3 lic.)</span>
+          </div>
+
+          <div class="divider-line"></div>
+
+          <div class="summary-row">
+            <span class="summary-row-label">Promedio diario de ventas:</span>
+            <span class="summary-row-val">$ 240.000 COP</span>
+          </div>
+
+          <div class="summary-row">
+            <span class="summary-row-label">Reemplazos registrados:</span>
+            <span class="summary-row-val">1 (Hardware averiado)</span>
+          </div>
+
+          <div class="summary-row">
+            <span class="summary-row-label">Pruebas gratuitas iniciadas:</span>
+            <span class="summary-row-val">1 (En curso 30 días)</span>
+          </div>
+
+          <div class="divider-line"></div>
+
+          <div style="background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle); font-size: 11px; color: var(--text-muted); line-height: 1.4;">
+            <strong>Nota de integridad contable:</strong> Cada registro de cobro está atribuido a una sesión autenticada con marca de tiempo UTC inmutable del servidor.
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function toggleSidebar(open) {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (open) {
+        sidebar.classList.add('open');
+        overlay.classList.add('active');
+      } else {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('active');
+      }
+    }
+
+    const months = [
+      { name: "Mayo 2026", total: "$ 1.800.000 COP", count: "4", pending: "$ 0 COP", free: "1" },
+      { name: "Junio 2026", total: "$ 2.250.000 COP", count: "5", pending: "$ 0 COP", free: "0" },
+      { name: "Julio 2026", total: "$ 2.700.000 COP", count: "6", pending: "$ 450.000 COP", free: "2" },
+      { name: "Agosto 2026", total: "$ 2.250.000 COP", count: "5", pending: "$ 0 COP", free: "1" },
+      { name: "Septiembre 2026", total: "$ 2.700.000 COP", count: "6", pending: "$ 0 COP", free: "3" },
+      { name: "Octubre 2026", total: "$ 3.600.000 COP", count: "8", pending: "$ 450.000 COP", free: "2" }
+    ];
+
+    let currentIdx = 5;
+
+    function changeMonth(delta) {
+      currentIdx += delta;
+      if (currentIdx < 0) currentIdx = 0;
+      if (currentIdx >= months.length) currentIdx = months.length - 1;
+
+      const m = months[currentIdx];
+      document.getElementById('month-label').textContent = m.name;
+      document.getElementById('table-month-name').textContent = m.name;
+      document.getElementById('kpi-total').innerHTML = `${m.total} <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span>`;
+      document.getElementById('kpi-count').innerHTML = `${m.count} <span style="font-size: 14px; font-weight: 600; color: var(--text-muted);">licencias</span>`;
+      document.getElementById('kpi-pending').innerHTML = `${m.pending} <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span>`;
+      document.getElementById('kpi-free').innerHTML = `${m.free} <span style="font-size: 14px; font-weight: 600; color: var(--text-muted);">equipos</span>`;
+    }
+  </script>
+</body>
+</html>

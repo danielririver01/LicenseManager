@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block titulo %}{{ app_name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/lm.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="marca">License <span>Manager</span></div>
+    {% if current_user %}
+    <div class="sesion">
+      <span>{{ current_user.nombre_completo }}
+        {% if current_user.rol == 'owner' %}<span class="badge badge-azul">Titular</span>
+        {% elif current_user.rol == 'coowner' %}<span class="badge badge-azul">Co-Titular</span>
+        {% else %}<span class="badge badge-gris">Admin</span>{% endif %}
+      </span>
+      <form method="post" action="/logout" style="display:inline">
+        <button type="submit" class="btn btn-secundario" style="padding:6px 12px;font-size:12px">Cerrar sesion</button>
+      </form>
+    </div>
+    {% endif %}
+  </header>
+
+  {% if current_user %}
+  <nav class="nav">
+    <ul>
+      <li><a href="/" class="{{ 'activo' if seccion == 'panel' else '' }}">Panel</a></li>
+      <li><a href="#" class="{{ 'activo' if seccion == 'clientes' else '' }}">Clientes</a></li>
+      <li><a href="#" class="{{ 'activo' if seccion == 'equipos' else '' }}">Equipos y licencias</a></li>
+      <li><a href="#" class="{{ 'activo' if seccion == 'ingresos' else '' }}">Ingresos</a></li>
+      <li><a href="#" class="{{ 'activo' if seccion == 'historial' else '' }}">Historial</a></li>
+      {% if current_user.rol in ('owner', 'coowner') %}
+      <li><a href="#" class="{{ 'activo' if seccion == 'administradores' else '' }}">Administradores</a></li>
+      {% endif %}
+    </ul>
+  </nav>
+  {% endif %}
+
+  {% block cuerpo %}{% endblock %}
+
+  <footer class="pie">{{ app_name }} · Servidor privado · Todas las acciones quedan registradas</footer>
+</body>
+</html>

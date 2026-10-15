@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — UI-07 Ciclo de Cobro y Vencimiento</title>
+  <style>
+    :root {
+      /* Paleta Kirito */
+      --azul-noche: #101828;
+      --azul-electrico: #2563eb;
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;
+      --verde-activo: #16a34a;
+      --ambar-alerta: #d97706;
+      --rojo-vencido: #dc2626;
+      
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-sidebar: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --sidebar-width: 250px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--blanco-frio);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* Simulation Toolbar on top */
+    .top-toolbar {
+      position: fixed;
+      top: 14px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+      z-index: 200;
+      font-size: 11px;
+    }
+
+    .sim-btn {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: var(--text-muted);
+      padding: 4px 10px;
+      border-radius: 9999px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .sim-btn.active {
+      background: var(--azul-noche);
+      border-color: var(--azul-noche);
+      color: #ffffff;
+    }
+
+    /* Backdrop overlay */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 24, 40, 0.6);
+      backdrop-filter: blur(2px);
+      z-index: 140;
+    }
+
+    /* Sidebar Navigation — Azul noche #101828 */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--azul-noche);
+      border-right: 1px solid var(--border-sidebar);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 150;
+      color: #ffffff;
+    }
+
+    .brand {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--border-sidebar);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-sub {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    .close-sidebar-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .nav-list {
+      list-style: none;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+
+    .nav-item a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .nav-item a:hover {
+      background: #1e293b;
+      color: #ffffff;
+    }
+
+    .nav-item.active a {
+      background: var(--azul-electrico);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .nav-item.titular-only {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+
+    .tag-role {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(217, 119, 6, 0.25);
+      color: #fbbf24;
+      font-weight: 700;
+      margin-left: auto;
+    }
+
+    .user-profile {
+      padding: 16px;
+      border-top: 1px solid var(--border-sidebar);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      color: #38bdf8;
+    }
+
+    .user-info {
+      flex-grow: 1;
+      overflow: hidden;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-role-text {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex-grow: 1;
+      padding: 32px 40px;
+      overflow-y: auto;
+      max-width: 1300px;
+    }
+
+    .mobile-header-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .hamburger-btn {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 24px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      letter-spacing: -0.02em;
+    }
+
+    .page-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* Alert Banner Container for Expired / Grace Period */
+    .notification-alert {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 13px;
+      color: #991b1b;
+      line-height: 1.5;
+    }
+
+    .notification-alert.warning {
+      background: #fffbeb;
+      border-color: #fef3c7;
+      color: #92400e;
+    }
+
+    .notification-alert.hidden {
+      display: none;
+    }
+
+    /* Metric Cards Summary */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .metric-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .metric-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .metric-val {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--azul-noche);
+      line-height: 1.1;
+    }
+
+    .metric-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    /* Table */
+    .table-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .table-container {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 12px;
+      min-width: 860px;
+    }
+
+    .data-table th {
+      background: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+
+    .data-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid #f1f5f9;
+      color: var(--text-main);
+      white-space: nowrap;
+    }
+
+    .data-table tr:hover td {
+      background: #f8fafc;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .badge-paid {
+      background: #dcfce7;
+      color: var(--verde-activo);
+    }
+
+    .badge-trial {
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+
+    .badge-pending {
+      background: #fef3c7;
+      color: var(--ambar-alerta);
+    }
+
+    .badge-expired {
+      background: #fee2e2;
+      color: var(--rojo-vencido);
+    }
+
+    .countdown-tag {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-top: 3px;
+    }
+
+    .countdown-active {
+      background: #f0fdf4;
+      color: var(--verde-activo);
+      border: 1px solid #bbf7d0;
+    }
+
+    .countdown-warning {
+      background: #fffbeb;
+      color: var(--ambar-alerta);
+      border: 1px solid #fde68a;
+    }
+
+    .countdown-danger {
+      background: #fef2f2;
+      color: var(--rojo-vencido);
+      border: 1px solid #fecaca;
+    }
+
+    .amount-cop {
+      font-weight: 700;
+      color: var(--azul-noche);
+    }
+
+    .btn-quick-pay {
+      background: var(--verde-activo);
+      color: #ffffff;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-quick-pay:hover {
+      background: #15803d;
+    }
+
+    .btn-edit-action {
+      background: none;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-edit-action:hover {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+      color: var(--azul-electrico);
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 24, 40, 0.6);
+      backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+      padding: 16px;
+    }
+
+    .modal-box {
+      background: #ffffff;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 480px;
+      padding: 28px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--azul-noche);
+    }
+
+    .btn-close-modal {
+      background: none;
+      border: none;
+      font-size: 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .modal-form-group {
+      margin-bottom: 16px;
+    }
+
+    .modal-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--azul-noche);
+      margin-bottom: 6px;
+    }
+
+    .modal-input, .modal-select {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .btn-modal-cancel {
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .btn-modal-save {
+      background: var(--azul-electrico);
+      color: #ffffff;
+      border: none;
+      padding: 9px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 900px) {
+      .metrics-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .sidebar-overlay.active {
+        display: block;
+      }
+      .close-sidebar-btn {
+        display: block;
+      }
+      .mobile-header-bar {
+        display: flex;
+      }
+      .main-content {
+        padding: 16px;
+      }
+      .top-toolbar {
+        top: auto;
+        bottom: 12px;
+        right: 12px;
+      }
+      .metrics-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+
+  <!-- Simulation Toolbar -->
+  <div class="top-toolbar">
+    <span style="color: var(--text-muted);">Simular Ciclo:</span>
+    <button class="sim-btn active" id="btn-p1" onclick="simulateCycle('day1')">1. Día 1 (Prueba)</button>
+    <button class="sim-btn" id="btn-p2" onclick="simulateCycle('day31')">2. Día 31 (Cobro Pendiente)</button>
+    <button class="sim-btn" id="btn-p3" onclick="simulateCycle('day34')">3. Día 34 (Vencido + Alerta)</button>
+    <button class="sim-btn" id="btn-p4" onclick="simulateCycle('paid')">4. Cobrado (Detenido)</button>
+  </div>
+
+  <!-- Sidebar Kirito -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div>
+        <div class="brand-title">
+          <span style="color: var(--azul-electrico);">◆</span> FRUBBER
+        </div>
+        <div class="brand-sub">License Manager · Intranet</div>
+      </div>
+      <button class="close-sidebar-btn" onclick="toggleSidebar(false)">✕</button>
+    </div>
+
+    <ul class="nav-list">
+      <li class="nav-item">
+        <a href="#panel">
+          <span>📊</span> Resumen / Panel
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#clientes">
+          <span>🏢</span> Verdulerías / Clientes
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#licencias">
+          <span>🔑</span> Equipos y Licencias
+        </a>
+      </li>
+      <li class="nav-item active">
+        <a href="#ingresos">
+          <span>💵</span> Ingresos manuales
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#historial">
+          <span>🕒</span> Historial de cambios
+        </a>
+      </li>
+      <li class="nav-item titular-only">
+        <a href="#administradores">
+          <span>👥</span> Administradores
+          <span class="tag-role">Titular</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#configuracion">
+          <span>⚙</span> Configuración
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#respaldo">
+          <span>🛡</span> Respaldo
+        </a>
+      </li>
+    </ul>
+
+    <div class="user-profile">
+      <div class="user-avatar">DR</div>
+      <div class="user-info">
+        <div class="user-name">Daniel Rivera</div>
+        <div class="user-role-text">Titular de la cuenta</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="mobile-header-bar">
+      <button class="hamburger-btn" onclick="toggleSidebar(true)">☰ Menú</button>
+      <div style="font-size: 13px; font-weight: 700; color: var(--azul-noche);">FRUBBER · License Manager</div>
+    </div>
+
+    <div class="header-bar">
+      <div>
+        <h1 class="page-title">Ingresos y Estado de Cuentas (COP)</h1>
+        <p class="page-desc">Cronómetro automático de 30 días, gracia comercial y congelamiento tras pago.</p>
+      </div>
+    </div>
+
+    <!-- Notification Banner (Shows dynamically on Day 31 or Day 34) -->
+    <div class="notification-alert warning hidden" id="alert-day31">
+      <span style="font-size: 18px;">⚠</span>
+      <div>
+        <strong>Aviso del Día 31 — Periodo de prueba finalizado:</strong> La verdulería <strong>La Huerta Central</strong> cumplió sus 30 días gratis. El sistema ha pasado la cuenta a <strong>Cobro Pendiente ($ 450.000 COP)</strong>. Tienes unos días de gracia para gestionar el pago antes de marcarla como vencida.
+      </div>
+    </div>
+
+    <div class="notification-alert hidden" id="alert-day34">
+      <span style="font-size: 18px;">🚨</span>
+      <div>
+        <strong>Alerta Crítica — Día 34 (Cuenta Vencida):</strong> Pasaron 34 días sin confirmación de pago. <strong>El cronómetro se ha detenido en Día 34</strong> y la cuenta se catalogó como <strong>Vencida / Sin Cobro</strong>. Cuando recibas el pago o decidas extenderla, cámbiala a "Pagado" y no se volverá a alterar.
+      </div>
+    </div>
+
+    <!-- Metrics Row -->
+    <div class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-label">Ventas cobradas</div>
+        <div class="metric-val" id="m-paid" style="color: var(--verde-activo);">$ 8.500.000 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span></div>
+        <div class="metric-sub" id="m-paid-sub">22 licencias pagadas</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Cobros pendientes</div>
+        <div class="metric-val" id="m-pending" style="color: var(--ambar-alerta);">$ 0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span></div>
+        <div class="metric-sub" id="m-pending-sub">0 cuentas pendientes</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Cuentas vencidas</div>
+        <div class="metric-val" id="m-expired" style="color: var(--rojo-vencido);">0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">cuentas</span></div>
+        <div class="metric-sub" id="m-expired-sub">0 vencidas sin cobro</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-label">Pruebas en curso</div>
+        <div class="metric-val" id="m-trial">1 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">activa</span></div>
+        <div class="metric-sub">Cronómetro corriendo</div>
+      </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="table-card">
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Fecha de Registro</th>
+              <th>Verdulería / Negocio</th>
+              <th>Código Equipo</th>
+              <th>Cronómetro Interno</th>
+              <th>Importe (COP)</th>
+              <th>Estado de la Cuenta</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- FILA DINÁMICA -->
+            <tr id="row-dynamic" style="background: rgba(37, 99, 235, 0.03);">
+              <td>15/10/2026</td>
+              <td>
+                <strong>Verdulería La Huerta Central</strong>
+                <div style="font-size: 11px; color: var(--text-muted);">Pedro Gómez · +57 310 123 4567</div>
+              </td>
+              <td><code>A4B9-C102-E8F3-7B1A</code></td>
+              
+              <td id="td-timer">
+                <span class="countdown-tag countdown-active">Día 1 de 30</span>
+                <div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Vence prueba: 14/11/2026</div>
+              </td>
+
+              <td id="td-amount">
+                <span class="amount-cop">$ 0 COP</span>
+                <div style="font-size: 10px; color: var(--text-muted);">Prueba gratis</div>
+              </td>
+
+              <td id="td-status">
+                <span class="badge badge-trial">● En periodo de prueba</span>
+              </td>
+
+              <td id="td-actions">
+                <button class="btn-quick-pay" onclick="simulateCycle('paid')">Marcar Pagado</button>
+                <button class="btn-edit-action" onclick="openModal('Verdulería La Huerta Central')">Editar</button>
+              </td>
+            </tr>
+
+            <!-- Históricas ya consolidadas -->
+            <tr>
+              <td>12/10/2026</td>
+              <td><strong>Frutas El Manantial</strong></td>
+              <td><code>5D21-98AF-44B1-02C9</code></td>
+              <td><span style="color: var(--verde-activo); font-weight: 600;">✓ Detenido</span></td>
+              <td><span class="amount-cop">$ 450.000 COP</span></td>
+              <td><span class="badge badge-paid">● Pagado</span></td>
+              <td><button class="btn-edit-action" onclick="openModal('Frutas El Manantial')">Editar</button></td>
+            </tr>
+
+            <tr>
+              <td>08/10/2026</td>
+              <td><strong>Verduras Don Pedro</strong></td>
+              <td><code>77C1-E40B-9920-A118</code></td>
+              <td><span style="color: var(--verde-activo); font-weight: 600;">✓ Detenido</span></td>
+              <td><span class="amount-cop">$ 450.000 COP</span></td>
+              <td><span class="badge badge-paid">● Pagado</span></td>
+              <td><button class="btn-edit-action" onclick="openModal('Verduras Don Pedro')">Editar</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal Editar -->
+  <div class="modal-backdrop hidden" id="modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 class="modal-title">Actualizar Estado de Cuenta</h2>
+        <button class="btn-close-modal" onclick="closeModal()">✕</button>
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Verdulería</label>
+        <input type="text" class="modal-input" id="m-biz-name" readonly style="background:#f8fafc;">
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Estado deseado</label>
+        <select class="modal-select" id="m-sel-status">
+          <option value="paid">Pagado ($ 450.000 COP) — Detiene cronómetro</option>
+          <option value="day31">Cobro Pendiente ($ 450.000 COP) — Periodo de gracia</option>
+          <option value="day34">Vencida / Sin Cobro — Detiene cronómetro</option>
+          <option value="day1">Reiniciar a prueba activa</option>
+        </select>
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Nota o comprobante</label>
+        <input type="text" class="modal-input" placeholder="Ej. El cliente pagó por Nequi antes del vencimiento">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="closeModal()">Cancelar</button>
+        <button class="btn-modal-save" onclick="applyModalChanges()">Guardar y Detener Cronómetro</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleSidebar(open) {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (open) {
+        sidebar.classList.add('open');
+        overlay.classList.add('active');
+      } else {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('active');
+      }
+    }
+
+    // CONTROL DEL CICLO COMPLETO
+    function simulateCycle(phase) {
+      const btnP1 = document.getElementById('btn-p1');
+      const btnP2 = document.getElementById('btn-p2');
+      const btnP3 = document.getElementById('btn-p3');
+      const btnP4 = document.getElementById('btn-p4');
+
+      const alertDay31 = document.getElementById('alert-day31');
+      const alertDay34 = document.getElementById('alert-day34');
+
+      const tdTimer = document.getElementById('td-timer');
+      const tdAmount = document.getElementById('td-amount');
+      const tdStatus = document.getElementById('td-status');
+
+      const mPaid = document.getElementById('m-paid');
+      const mPending = document.getElementById('m-pending');
+      const mExpired = document.getElementById('m-expired');
+      const mTrial = document.getElementById('m-trial');
+
+      [btnP1, btnP2, btnP3, btnP4].forEach(b => b.classList.remove('active'));
+      alertDay31.classList.add('hidden');
+      alertDay34.classList.add('hidden');
+
+      if (phase === 'day1') {
+        btnP1.classList.add('active');
+        tdTimer.innerHTML = '<span class="countdown-tag countdown-active">Día 1 de 30</span><div style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">Vence prueba: 14/11/2026</div>';
+        tdAmount.innerHTML = '<span class="amount-cop">$ 0 COP</span><div style="font-size: 10px; color: var(--text-muted);">Prueba gratis</div>';
+        tdStatus.innerHTML = '<span class="badge badge-trial">● En periodo de prueba</span>';
+
+        mPending.innerHTML = '$ 0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span>';
+        mExpired.innerHTML = '0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">cuentas</span>';
+        mTrial.innerHTML = '1 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">activa</span>';
+      }
+      else if (phase === 'day31') {
+        btnP2.classList.add('active');
+        alertDay31.classList.remove('hidden');
+        // DÍA 31: AUTO-PENDIENTE
+        tdTimer.innerHTML = '<span class="countdown-tag countdown-warning">Día 31 (Gracia)</span><div style="font-size: 10px; color: var(--ambar-alerta); font-weight: 600;">30 días cumplidos</div>';
+        tdAmount.innerHTML = '<span class="amount-cop" style="color: var(--ambar-alerta);">$ 450.000 COP</span><div style="font-size: 10px; color: var(--text-muted);">Tarifa de compra</div>';
+        tdStatus.innerHTML = '<span class="badge badge-pending">⚠ Cobro Pendiente</span>';
+
+        mPending.innerHTML = '$ 450.000 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span>';
+        mExpired.innerHTML = '0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">cuentas</span>';
+        mTrial.innerHTML = '0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">activas</span>';
+      }
+      else if (phase === 'day34') {
+        btnP3.classList.add('active');
+        alertDay34.classList.remove('hidden');
+        // DÍA 34: VENCIDO, CRONÓMETRO DETENIDO
+        tdTimer.innerHTML = '<span class="countdown-tag countdown-danger">Detenido al Día 34</span><div style="font-size: 10px; color: var(--rojo-vencido); font-weight: 700;">Cronómetro congelado</div>';
+        tdAmount.innerHTML = '<span class="amount-cop" style="color: var(--rojo-vencido);">$ 450.000 COP</span><div style="font-size: 10px; color: var(--text-muted);">Deuda vencida</div>';
+        tdStatus.innerHTML = '<span class="badge badge-expired">✕ Cuenta Vencida</span>';
+
+        mPending.innerHTML = '$ 0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span>';
+        mExpired.innerHTML = '1 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">cuenta</span>';
+        mTrial.innerHTML = '0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">activas</span>';
+      }
+      else if (phase === 'paid') {
+        btnP4.classList.add('active');
+        // PAGADO: CRONÓMETRO CONGELADO DEFINITIVO
+        tdTimer.innerHTML = '<span style="color: var(--verde-activo); font-weight: 700;">✓ Detenido (Cobrado)</span><div style="font-size: 10px; color: var(--text-muted);">No suma más días</div>';
+        tdAmount.innerHTML = '<span class="amount-cop">$ 450.000 COP</span><div style="font-size: 10px; color: var(--verde-activo);">Venta consolidada</div>';
+        tdStatus.innerHTML = '<span class="badge badge-paid">● Pagado</span>';
+
+        mPaid.innerHTML = '$ 8.950.000 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span>';
+        mPending.innerHTML = '$ 0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">COP</span>';
+        mExpired.innerHTML = '0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">cuentas</span>';
+        mTrial.innerHTML = '0 <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">activas</span>';
+      }
+    }
+
+    function openModal(biz) {
+      document.getElementById('m-biz-name').value = biz;
+      document.getElementById('modal').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('modal').classList.add('hidden');
+    }
+
+    function applyModalChanges() {
+      const val = document.getElementById('m-sel-status').value;
+      simulateCycle(val);
+      closeModal();
+    }
+  </script>
+</body>
+</html>

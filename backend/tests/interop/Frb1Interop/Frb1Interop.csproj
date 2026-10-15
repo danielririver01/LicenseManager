@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Arnés de interoperabilidad (no forma parte del producto).
+
+    Enlaza los archivos C# REALES de Frubber POS sin copiarlos, de modo que
+    cada prueba verifica contra la implementación que corre en la caja del
+    cliente, no contra una reimplementación paralela que podría divergir.
+
+    Si alguien mueve o cambia un archivo en el POS, este proyecto deja de
+    compilar y la interop se rompe de forma ruidosa y a tiempo.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Frb1Interop</RootNamespace>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="$(FrubberPosSrc)\FrubberPOS.Domain\Licensing\LicenseKeyFormat.cs" Link="pos\LicenseKeyFormat.cs" />
+    <Compile Include="$(FrubberPosSrc)\FrubberPOS.Application\Licensing\ILicenseSignatureVerifier.cs" Link="pos\ILicenseSignatureVerifier.cs" />
+    <Compile Include="$(FrubberPosSrc)\FrubberPOS.Infrastructure\Licensing\EcdsaLicenseSignatureVerifier.cs" Link="pos\EcdsaLicenseSignatureVerifier.cs" />
+    <Compile Include="$(FrubberPosSrc)\FrubberPOS.Infrastructure\Licensing\LicensePublicKeys.cs" Link="pos\LicensePublicKeys.cs" />
+  </ItemGroup>
+
+</Project>

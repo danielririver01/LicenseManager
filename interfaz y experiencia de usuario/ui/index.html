@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — Directorio de Auditoría y Prototipos</title>
+  <style>
+    :root {
+      --azul-noche: #101828;
+      --azul-electrico: #2563eb;
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;
+      --verde-activo: #16a34a;
+      --ambar-alerta: #d97706;
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--blanco-frio); color: var(--text-main); min-height: 100vh; padding: 40px 20px; }
+    .container { max-width: 1000px; margin: 0 auto; }
+    .header { margin-bottom: 32px; text-align: center; }
+    .badge { display: inline-block; background: #eff6ff; color: var(--azul-electrico); font-weight: 700; font-size: 11px; padding: 4px 12px; border-radius: 9999px; text-transform: uppercase; margin-bottom: 10px; border: 1px solid #dbeafe; }
+    .title { font-size: 28px; font-weight: 800; color: var(--azul-noche); }
+    .desc { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-bottom: 40px; }
+    .card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 22px; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05); display: flex; flex-direction: column; justify-content: space-between; transition: all 0.2s; }
+    .card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16, 24, 40, 0.08); border-color: #cbd5e1; }
+    .card-id { font-size: 11px; font-weight: 700; color: var(--azul-electrico); text-transform: uppercase; margin-bottom: 4px; }
+    .card-title { font-size: 16px; font-weight: 700; color: var(--azul-noche); margin-bottom: 8px; }
+    .card-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin-bottom: 16px; flex-grow: 1; }
+    .btn-open { background: var(--azul-noche); color: #ffffff; text-decoration: none; padding: 9px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; text-align: center; display: block; }
+    .btn-open:hover { background: var(--azul-electrico); }
+
+    .rules-card { background: #ffffff; border: 1px solid #bfdbfe; border-radius: 14px; padding: 24px; margin-bottom: 30px; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.05); }
+    .rules-title { font-size: 16px; font-weight: 700; color: var(--azul-noche); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .rules-list { list-style: none; font-size: 13px; color: var(--text-main); display: flex; flex-direction: column; gap: 8px; line-height: 1.5; }
+    .rules-list li::before { content: "✓ "; color: var(--verde-activo); font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="badge">Ecosistema Kirito · Intranet LAN</div>
+      <h1 class="title">License Manager de Frubber — Auditoría de Pantallas</h1>
+      <p class="desc">Haz clic en cualquier pantalla para abrirla, auditar su diseño, paleta oficial y probar sus estados interactivos.</p>
+    </div>
+
+    <div class="rules-card">
+      <div class="rules-title"><span>🛡</span> Principios Clave Respetados y Documentados en Google Drive</div>
+      <ul class="rules-list">
+        <li><strong>Fondo Blanco Frío (`#F8FAFC`) y Barra Azul Noche (`#101828`):</strong> Identidad tecnológica, sobria y profesional para verdulerías.</li>
+        <li><strong>Tarifa y Moneda Oficial en COP:</strong> Ventas comerciales estándar a $ 450.000 COP, segregadas de reemplazos y cortesías ($ 0 COP).</li>
+        <li><strong>Timestamp Automático del Servidor:</strong> El usuario nunca digita fechas; el backend captura la marca de tiempo UTC bajo DPAPI.</li>
+        <li><strong>Cronómetro de Prueba (30 Días):</strong> Día 1 a 30 en prueba → Día 31 a Cobro Pendiente (con gracia) → Día 34 a Cuenta Vencida y congelamiento. Marcar "Pagado" detiene el cronómetro definitivamente.</li>
+        <li><strong>Seguridad del Titular (Inmutable):</strong> Solo el titular ve y gestiona Administradores; los operadores regulares reciben error 403.</li>
+      </ul>
+    </div>
+
+    <div class="grid">
+      <!-- UI-01 -->
+      <div class="card">
+        <div>
+          <div class="card-id">UI-01 / UI-01B</div>
+          <div class="card-title">Inicio de Sesión y Asistente</div>
+          <div class="card-desc">Login limpio sin registros públicos y asistente de primer arranque para crear al Titular en bases de datos limpias.</div>
+        </div>
+        <a href="01-inicio-sesion.html" class="btn-open">Auditar UI-01 →</a>
+      </div>
+
+      <!-- UI-02 -->
+      <div class="card">
+        <div>
+          <div class="card-id">UI-02</div>
+          <div class="card-title">Panel / Dashboard Principal</div>
+          <div class="card-desc">Vista general, métricas segregadas (ventas vs gratis), últimas emisiones, tabla de ingresos en COP y simulador de roles.</div>
+        </div>
+        <a href="02-panel-dashboard.html" class="btn-open">Auditar UI-02 →</a>
+      </div>
+
+      <!-- UI-03 -->
+      <div class="card">
+        <div>
+          <div class="card-id">UI-03</div>
+          <div class="card-title">Verdulerías y Clientes</div>
+          <div class="card-desc">Directorio de negocios, número de computadores/balanzas activas por verdulería y modal de registro rápido.</div>
+        </div>
+        <a href="03-verdulerias-clientes.html" class="btn-open">Auditar UI-03 →</a>
+      </div>
+
+      <!-- UI-04 -->
+      <div class="card">
+        <div>
+          <div class="card-id">UI-04</div>
+          <div class="card-title">Equipos y Licencias</div>
+          <div class="card-desc">Inventario completo de computadores únicos de 16 hex, llaves asociadas, algoritmo de firma y accesos directos a fichas.</div>
+        </div>
+        <a href="04-equipos-licencias.html" class="btn-open">Auditar UI-04 →</a>
+      </div>
+
+      <!-- UI-05 -->
+      <div class="card">
+        <div>
+          <div class="card-id">UI-05</div>
+          <div class="card-title">Emitir Licencia FRB1</div>
+          <div class="card-desc">Formulario que inicia limpio para verdulerías, validación de 16 hex, resumen y generación del string criptográfico con botón copiar.</div>
+        </div>
+        <a href="05-emitir-licencia.html" class="btn-open">Auditar UI-05 →</a>
+      </div>
+
+      <!-- UI-06 -->
+      <div class="card">
+        <div>
+          <div class="card-id">UI-06</div>
+          <div class="card-title">Ficha de Equipo y Licencia</div>
+          <div class="card-desc">Detalle técnico del computador, vigencia vitalicia, nota de fail-closed offline, cobro en COP y timeline de auditoría.</div>
+        </div>
+        <a href="06-ficha-equipo-licencia.html" class="btn-open">Auditar UI-06 →</a>
+      </div>
+
+      <!-- UI-07 -->
+      <div class="card">
+        <div>
+          <div class="card-id">UI-07</div>
+          <div class="card-title">Ingresos y Cronómetro</div>
+          <div class="card-desc">Control de cobros manuales con simulador del cronómetro de 30 días, paso al día 31, día 34 vencido y congelamiento al cobrar.</div>
+        </div>
+        <a href="07-ingresos-manuales.html" class="btn-open">Auditar UI-07 →</a>
+      </div>
+
+      <!-- UI-07B -->
+      <div class="card">
+        <div>
+          <div class="card-id">UI-07B</div>
+          <div class="card-title">Ingresos Mensuales y Cierres</div>
+          <div class="card-desc">Comparativa semestral en barras, selector de meses, liquidación de ventas por operador y promedios diarios.</div>
+        </div>
+        <a href="07b-ingresos-mensuales.html" class="btn-open">Auditar UI-07B →</a>
+      </div>
+
+      <!-- UI-08 -->
+      <div class="card">
+        <div>
+          <div class="card-id">UI-08</div>
+          <div class="card-title">Historial de Auditoría</div>
+          <div class="card-desc">Registro inmutable de todas las operaciones realizadas en el servidor con timestamps exactos del sistema y autor.</div>
+        </div>
+        <a href="08-historial-auditoria.html" class="btn-open">Auditar UI-08 →</a>
+      </div>
+
+      <!-- UI-09 -->
+      <div class="card">
+        <div>
+          <div class="card-id">UI-09</div>
+          <div class="card-title">Administradores (Titular)</div>
+          <div class="card-desc">Gestión exclusiva del Titular: alta de operadores, reseteo de claves, desactivación con auditoría y bloqueo 403 para admins.</div>
+        </div>
+        <a href="09-administradores.html" class="btn-open">Auditar UI-09 →</a>
+      </div>
+
+      <!-- UI-11 NUEVA -->
+      <div class="card" style="border: 1px solid #93c5fd; background: #f0f7ff;">
+        <div>
+          <div class="card-id" style="color: #1d4ed8;">UI-11 (NUEVA · EXCLUSIVA TITULAR)</div>
+          <div class="card-title">Liquidación y Pago a Administradores</div>
+          <div class="card-desc">Reparto de ventas, cálculo de comisiones por licencias cobradas en COP y registro de pagos (Nequi, Bancolombia, Efectivo).</div>
+        </div>
+        <a href="11-liquidacion-administradores.html" class="btn-open" style="background: var(--azul-electrico);">Auditar UI-11 →</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

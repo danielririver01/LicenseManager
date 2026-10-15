@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — UI-04 Equipos y Licencias</title>
+  <style>
+    :root {
+      --azul-noche: #101828;
+      --azul-electrico: #2563eb;
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;
+      --verde-activo: #16a34a;
+      --ambar-alerta: #d97706;
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-sidebar: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --sidebar-width: 250px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--blanco-frio); color: var(--text-main); min-height: 100vh; display: flex; }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(16, 24, 40, 0.6); z-index: 140; }
+    .sidebar { width: var(--sidebar-width); background: var(--azul-noche); border-right: 1px solid var(--border-sidebar); display: flex; flex-direction: column; flex-shrink: 0; height: 100vh; position: sticky; top: 0; z-index: 150; color: #ffffff; }
+    .brand { padding: 24px 20px 20px; border-bottom: 1px solid var(--border-sidebar); display: flex; justify-content: space-between; align-items: center; }
+    .brand-title { font-size: 16px; font-weight: 700; color: #ffffff; display: flex; align-items: center; gap: 8px; }
+    .brand-sub { font-size: 10px; color: #94a3b8; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+    .close-sidebar-btn { display: none; background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; }
+    .nav-list { list-style: none; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }
+    .nav-item a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; color: #cbd5e1; text-decoration: none; font-size: 13px; font-weight: 500; }
+    .nav-item a:hover { background: #1e293b; color: #ffffff; }
+    .nav-item.active a { background: var(--azul-electrico); color: #ffffff; font-weight: 600; }
+    .nav-item.titular-only { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 8px; margin-top: 8px; }
+    .tag-role { font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(217, 119, 6, 0.25); color: #fbbf24; font-weight: 700; margin-left: auto; }
+    .user-profile { padding: 16px; border-top: 1px solid var(--border-sidebar); display: flex; align-items: center; gap: 10px; background: rgba(0, 0, 0, 0.15); }
+    .user-avatar { width: 34px; height: 34px; border-radius: 8px; background: #1e293b; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; color: #38bdf8; }
+    .user-name { font-size: 13px; font-weight: 600; color: #ffffff; }
+    .user-role-text { font-size: 11px; color: #94a3b8; }
+    
+    .main-content { flex-grow: 1; padding: 32px 40px; overflow-y: auto; max-width: 1250px; }
+    .mobile-header-bar { display: none; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .hamburger-btn { background: var(--surface-card); border: 1px solid var(--border-subtle); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .header-bar { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+    .page-title { font-size: 24px; font-weight: 700; color: var(--azul-noche); }
+    .page-desc { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    .btn-primary-action { background: var(--azul-electrico); color: #ffffff; border: none; padding: 11px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary-action:hover { background: var(--azul-electrico-hover); }
+
+    .filter-bar { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+    .search-input { flex: 1; min-width: 240px; background: #f8fafc; border: 1px solid var(--border-subtle); padding: 9px 14px; border-radius: 8px; font-size: 13px; outline: none; }
+    .filter-select { background: #f8fafc; border: 1px solid var(--border-subtle); padding: 9px 14px; border-radius: 8px; font-size: 13px; }
+
+    .table-card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05); }
+    .table-container { overflow-x: auto; }
+    .data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; min-width: 820px; }
+    .data-table th { background: #f8fafc; color: var(--text-muted); font-weight: 600; padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); font-size: 11px; text-transform: uppercase; }
+    .data-table td { padding: 14px 18px; border-bottom: 1px solid #f1f5f9; }
+    .mono-code { font-family: monospace; color: var(--azul-electrico); background: #eff6ff; border: 1px solid #dbeafe; padding: 3px 6px; border-radius: 4px; font-weight: 700; font-size: 11px; }
+    .badge { padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 700; }
+    .badge-active { background: #dcfce7; color: var(--verde-activo); }
+    .badge-free { background: #f1f5f9; color: #475569; }
+    .badge-replacement { background: #f3e8ff; color: #9333ea; }
+    .btn-table-action { background: none; border: 1px solid var(--border-subtle); padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--azul-electrico); }
+    .btn-table-action:hover { background: #eff6ff; }
+
+    @media (max-width: 768px) {
+      .sidebar { position: fixed; left: 0; top: 0; bottom: 0; transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-overlay.active { display: block; }
+      .close-sidebar-btn { display: block; }
+      .mobile-header-bar { display: flex; }
+      .main-content { padding: 16px; }
+      .header-bar { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div>
+        <div class="brand-title"><span style="color: var(--azul-electrico);">◆</span> FRUBBER</div>
+        <div class="brand-sub">License Manager · Intranet</div>
+      </div>
+      <button class="close-sidebar-btn" onclick="toggleSidebar(false)">✕</button>
+    </div>
+    <ul class="nav-list">
+      <li class="nav-item"><a href="02-panel-dashboard.html"><span>📊</span> Resumen / Panel</a></li>
+      <li class="nav-item"><a href="03-verdulerias-clientes.html"><span>🏢</span> Verdulerías / Clientes</a></li>
+      <li class="nav-item active"><a href="04-equipos-licencias.html"><span>🔑</span> Equipos y Licencias</a></li>
+      <li class="nav-item"><a href="07-ingresos-manuales.html"><span>💵</span> Ingresos y Cobros</a></li>
+      <li class="nav-item"><a href="08-historial-auditoria.html"><span>🕒</span> Historial de cambios</a></li>
+      <li class="nav-item titular-only"><a href="09-administradores.html"><span>👥</span> Administradores<span class="tag-role">Titular</span></a></li>
+      <li class="nav-item"><a href="#configuracion"><span>⚙</span> Configuración</a></li>
+      <li class="nav-item"><a href="#respaldo"><span>🛡</span> Respaldo</a></li>
+    </ul>
+    <div class="user-profile">
+      <div class="user-avatar">DR</div>
+      <div class="user-info">
+        <div class="user-name">Daniel Rivera</div>
+        <div class="user-role-text">Titular de la cuenta</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <div class="mobile-header-bar">
+      <button class="hamburger-btn" onclick="toggleSidebar(true)">☰ Menú</button>
+      <div style="font-size: 13px; font-weight: 700; color: var(--azul-noche);">FRUBBER · License Manager</div>
+    </div>
+
+    <div class="header-bar">
+      <div>
+        <h1 class="page-title">Equipos y Licencias Registradas</h1>
+        <p class="page-desc">Inventario completo de computadores vinculados a licencias vitalicias FRB1.</p>
+      </div>
+      <button class="btn-primary-action" onclick="window.location.href='05-emitir-licencia.html'">
+        <span>+</span> Emitir nueva licencia
+      </button>
+    </div>
+
+    <div class="filter-bar">
+      <input type="text" class="search-input" placeholder="Buscar por código de equipo (16 hex), verdulería o ID...">
+      <select class="filter-select">
+        <option>Todos los tipos</option>
+        <option>Ventas estándar</option>
+        <option>Reemplazos</option>
+        <option>Cortesías</option>
+      </select>
+      <span style="font-size: 12px; color: var(--text-muted);">28 equipos únicos</span>
+    </div>
+
+    <div class="table-card">
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Código Hardware (16 Hex)</th>
+              <th>Verdulería / Negocio</th>
+              <th>ID Licencia</th>
+              <th>Tipo</th>
+              <th>Firma Servidor</th>
+              <th>Fecha de Emisión</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="mono-code">A4B9-C102-E8F3-7B1A</span></td>
+              <td><strong>Verdulería La Huerta Central</strong></td>
+              <td><code>LIC-2026-0033</code></td>
+              <td><span class="badge badge-active">Venta</span></td>
+              <td>ECDSA P-256</td>
+              <td>15/10/2026 · 10:24 AM</td>
+              <td><button class="btn-table-action" onclick="window.location.href='06-ficha-equipo-licencia.html'">Abrir ficha</button></td>
+            </tr>
+            <tr>
+              <td><span class="mono-code">5D21-98AF-44B1-02C9</span></td>
+              <td><strong>Frutas El Manantial (Caja 1)</strong></td>
+              <td><code>LIC-2026-0032</code></td>
+              <td><span class="badge badge-replacement">Reemplazo</span></td>
+              <td>ECDSA P-256</td>
+              <td>14/10/2026 · 04:12 PM</td>
+              <td><button class="btn-table-action" onclick="alert('Abriendo ficha...')">Abrir ficha</button></td>
+            </tr>
+            <tr>
+              <td><span class="mono-code">77C1-E40B-9920-A118</span></td>
+              <td><strong>Verduras Don Pedro</strong></td>
+              <td><code>LIC-2026-0031</code></td>
+              <td><span class="badge badge-active">Venta</span></td>
+              <td>ECDSA P-256</td>
+              <td>13/10/2026 · 11:30 AM</td>
+              <td><button class="btn-table-action" onclick="alert('Abriendo ficha...')">Abrir ficha</button></td>
+            </tr>
+            <tr>
+              <td><span class="mono-code">F110-B882-01CA-9952</span></td>
+              <td><strong>Puesto Piloto Mercado</strong></td>
+              <td><code>LIC-2026-0029</code></td>
+              <td><span class="badge badge-free">Cortesía</span></td>
+              <td>ECDSA P-256</td>
+              <td>10/10/2026 · 09:15 AM</td>
+              <td><button class="btn-table-action" onclick="alert('Abriendo ficha...')">Abrir ficha</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function toggleSidebar(open) {
+      document.getElementById('sidebar').classList.toggle('open', open);
+      document.getElementById('sidebar-overlay').classList.toggle('active', open);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — UI-02 Panel (Dashboard)</title>
+  <style>
+    :root {
+      /* Paleta oficial Kirito */
+      --azul-noche: #101828;      /* Barra lateral, navegación y encabezados oscuros */
+      --azul-electrico: #2563eb;  /* Botones principales y acciones interactivas */
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;     /* Fondo general de la aplicación */
+      --verde-activo: #16a34a;    /* Licencias activas, éxitos */
+      --ambar-alerta: #d97706;    /* Advertencias, pendientes */
+      
+      /* Superficies claras profesionales */
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-sidebar: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --sidebar-width: 250px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--blanco-frio);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* Top switcher toolbar */
+    .top-toolbar {
+      position: fixed;
+      top: 14px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+      z-index: 200;
+      font-size: 11px;
+    }
+
+    .role-btn {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: var(--text-muted);
+      padding: 4px 12px;
+      border-radius: 9999px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .role-btn.active {
+      background: var(--azul-electrico);
+      border-color: var(--azul-electrico);
+      color: #ffffff;
+    }
+
+    /* Mobile Backdrop */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 24, 40, 0.6);
+      backdrop-filter: blur(2px);
+      z-index: 140;
+    }
+
+    /* Sidebar Navigation — Azul noche #101828 */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--azul-noche);
+      border-right: 1px solid var(--border-sidebar);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 150;
+      color: #ffffff;
+    }
+
+    .brand {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--border-sidebar);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-sub {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    .close-sidebar-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px;
+    }
+
+    .nav-list {
+      list-style: none;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+
+    .nav-item a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .nav-item a:hover {
+      background: #1e293b;
+      color: #ffffff;
+    }
+
+    .nav-item.active a {
+      background: var(--azul-electrico);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .nav-item.titular-only {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+
+    .tag-role {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(217, 119, 6, 0.25);
+      color: #fbbf24;
+      font-weight: 700;
+      margin-left: auto;
+    }
+
+    .user-profile {
+      padding: 16px;
+      border-top: 1px solid var(--border-sidebar);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      color: #38bdf8;
+    }
+
+    .user-info {
+      flex-grow: 1;
+      overflow: hidden;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-role-text {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    .btn-logout {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+    }
+
+    .btn-logout:hover {
+      color: #f87171;
+    }
+
+    /* Main Content Area — Blanco frío #F8FAFC */
+    .main-content {
+      flex-grow: 1;
+      padding: 32px 40px;
+      overflow-y: auto;
+      max-width: 1400px;
+    }
+
+    .mobile-header-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .hamburger-btn {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 28px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      letter-spacing: -0.02em;
+    }
+
+    .page-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .btn-primary-action {
+      background: var(--azul-electrico);
+      color: #ffffff;
+      border: none;
+      padding: 11px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+      transition: all 0.15s;
+    }
+
+    .btn-primary-action:hover {
+      background: var(--azul-electrico-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .stat-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .stat-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    .stat-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .pill-success {
+      background: #dcfce7;
+      color: var(--verde-activo);
+    }
+
+    .pill-muted {
+      background: #f1f5f9;
+      color: var(--text-muted);
+    }
+
+    /* Tables Grid */
+    .tables-layout {
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      gap: 20px;
+    }
+
+    .section-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .card-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #ffffff;
+    }
+
+    .card-heading {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--azul-noche);
+    }
+
+    .card-link {
+      font-size: 12px;
+      color: var(--azul-electrico);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .card-link:hover {
+      text-decoration: underline;
+    }
+
+    .table-container {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 12px;
+      min-width: 360px;
+    }
+
+    .data-table th {
+      background: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+
+    .data-table td {
+      padding: 13px 18px;
+      border-bottom: 1px solid #f1f5f9;
+      color: var(--text-main);
+      white-space: nowrap;
+    }
+
+    .data-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .data-table tr:hover td {
+      background: #f8fafc;
+    }
+
+    .mono-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: var(--azul-electrico);
+      background: #eff6ff;
+      border: 1px solid #dbeafe;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .badge-paid {
+      background: #dcfce7;
+      color: var(--verde-activo);
+    }
+
+    .badge-pending {
+      background: #fef3c7;
+      color: var(--ambar-alerta);
+    }
+
+    .badge-free {
+      background: #f1f5f9;
+      color: #475569;
+    }
+
+    .badge-replacement {
+      background: #f3e8ff;
+      color: #9333ea;
+    }
+
+    .currency-amount {
+      font-weight: 700;
+      color: var(--azul-noche);
+    }
+
+    /* System footer line */
+    .system-bar {
+      margin-top: 32px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* =========================================================
+       RESPONSIVE ADAPTATIONS (Tablets & Mobile Phones)
+       ========================================================= */
+    @media (max-width: 900px) {
+      .tables-layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .top-toolbar {
+        top: auto;
+        bottom: 12px;
+        right: 12px;
+        font-size: 10px;
+        padding: 5px 10px;
+      }
+
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+        box-shadow: 10px 0 30px rgba(16, 24, 40, 0.4);
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .sidebar-overlay.active {
+        display: block;
+      }
+
+      .close-sidebar-btn {
+        display: block;
+      }
+
+      .mobile-header-bar {
+        display: flex;
+      }
+
+      .main-content {
+        padding: 16px;
+      }
+
+      .header-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .btn-primary-action {
+        width: 100%;
+        padding: 14px;
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .stat-card {
+        padding: 16px;
+      }
+
+      .stat-value {
+        font-size: 24px;
+      }
+
+      .system-bar {
+        flex-direction: column;
+        text-align: center;
+        gap: 6px;
+        margin-bottom: 60px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Backdrop overlay for mobile menu -->
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+
+  <!-- Role simulator floating widget -->
+  <div class="top-toolbar">
+    <span style="color: var(--text-muted);">Rol:</span>
+    <button class="role-btn active" id="btn-role-titular" onclick="switchRole('titular')">Titular</button>
+    <button class="role-btn" id="btn-role-admin" onclick="switchRole('admin')">Admin</button>
+  </div>
+
+  <!-- Sidebar Navigation — Azul noche #101828 -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div>
+        <div class="brand-title">
+          <span style="color: var(--azul-electrico);">◆</span> FRUBBER
+        </div>
+        <div class="brand-sub">License Manager · Intranet</div>
+      </div>
+      <button class="close-sidebar-btn" onclick="toggleSidebar(false)">✕</button>
+    </div>
+
+    <ul class="nav-list">
+      <li class="nav-item active">
+        <a href="#panel" onclick="toggleSidebar(false)">
+          <span>📊</span> Resumen / Panel
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#clientes" onclick="toggleSidebar(false)">
+          <span>🏢</span> Clientes / Negocios
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#licencias" onclick="toggleSidebar(false)">
+          <span>🔑</span> Equipos y Licencias
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#ingresos" onclick="toggleSidebar(false)">
+          <span>💵</span> Ingresos manuales
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#historial" onclick="toggleSidebar(false)">
+          <span>🕒</span> Historial de cambios
+        </a>
+      </li>
+
+      <!-- Titular Only -->
+      <li class="nav-item titular-only" id="menu-administradores">
+        <a href="#administradores" onclick="toggleSidebar(false)">
+          <span>👥</span> Administradores
+          <span class="tag-role">Titular</span>
+        </a>
+      </li>
+
+      <!-- Config & Backup -->
+      <li class="nav-item">
+        <a href="#configuracion" onclick="toggleSidebar(false)">
+          <span>⚙</span> Configuración
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#respaldo" onclick="toggleSidebar(false)">
+          <span>🛡</span> Respaldo
+        </a>
+      </li>
+    </ul>
+
+    <div class="user-profile">
+      <div class="user-avatar" id="ui-avatar">DR</div>
+      <div class="user-info">
+        <div class="user-name" id="ui-username">Daniel Rivera</div>
+        <div class="user-role-text" id="ui-role-desc">Titular de la cuenta</div>
+      </div>
+      <button class="btn-logout" title="Cerrar sesión" onclick="alert('Cerrando sesión...')">⎋</button>
+    </div>
+  </aside>
+
+  <!-- Main View — Blanco frío #F8FAFC -->
+  <main class="main-content">
+    <!-- Mobile top bar with hamburger toggle -->
+    <div class="mobile-header-bar">
+      <button class="hamburger-btn" onclick="toggleSidebar(true)">
+        <span>☰</span> Menú
+      </button>
+      <div style="font-size: 13px; font-weight: 700; color: var(--azul-noche);">
+        FRUBBER · License Manager
+      </div>
+    </div>
+
+    <div class="header-bar">
+      <div>
+        <h1 class="page-title">Panel de control</h1>
+        <p class="page-desc">Vista general del registro de licencias, equipos e ingresos capturados en intranet.</p>
+      </div>
+      <button class="btn-primary-action" onclick="alert('Navegando a UI-05: Emitir licencia')">
+        <span>+</span> Emitir licencia FRB1
+      </button>
+    </div>
+
+    <!-- Stats Grid -->
+    <section class="stats-grid">
+      <!-- 1. Equipos -->
+      <div class="stat-card">
+        <div class="stat-title">Equipos registrados</div>
+        <div class="stat-value">28</div>
+        <div class="stat-sub">
+          <span class="pill pill-muted">POS offline</span>
+          <span>16 hex</span>
+        </div>
+      </div>
+
+      <!-- 2. Licencias emitidas -->
+      <div class="stat-card">
+        <div class="stat-title">Licencias activas</div>
+        <div class="stat-value">31</div>
+        <div class="stat-sub">
+          <span class="pill pill-success">Estado correcto</span>
+          <span>Vitalicias</span>
+        </div>
+      </div>
+
+      <!-- 3. Ventas Pagadas -->
+      <div class="stat-card">
+        <div class="stat-title">Ingresos cobrados (Ventas)</div>
+        <div class="stat-value">$ 8.500.000 <span style="font-size: 13px; font-weight: 600; color: var(--text-muted);">COP</span></div>
+        <div class="stat-sub">
+          <span class="pill pill-success">22 ventas pagadas</span>
+        </div>
+      </div>
+
+      <!-- 4. Segregación -->
+      <div class="stat-card">
+        <div class="stat-title">Gratis / Reemplazos</div>
+        <div class="stat-value">6 / 3</div>
+        <div class="stat-sub">
+          <span>Excluidos de ventas</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tables Layout -->
+    <div class="tables-layout">
+      <!-- Recent Emissions Table -->
+      <section class="section-card">
+        <div class="card-header">
+          <h2 class="card-heading">Últimas emisiones de licencias</h2>
+          <a href="#licencias" class="card-link">Ver todas →</a>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Cliente / Negocio</th>
+                <th>Código Equipo</th>
+                <th>Tipo</th>
+                <th>Emisor</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>15/10/2026</td>
+                <td><strong>Supermercado El Ahorro</strong></td>
+                <td><span class="mono-code">A4B9-C102-E8F3</span></td>
+                <td><span class="badge badge-paid">Venta</span></td>
+                <td>Daniel Rivera</td>
+              </tr>
+              <tr>
+                <td>14/10/2026</td>
+                <td><strong>Farmacia La Central</strong></td>
+                <td><span class="mono-code">5D21-98AF-44B1</span></td>
+                <td><span class="badge badge-replacement">Reemplazo</span></td>
+                <td>Carlos Gómez</td>
+              </tr>
+              <tr>
+                <td>13/10/2026</td>
+                <td><strong>Panadería San Jorge</strong></td>
+                <td><span class="mono-code">77C1-E40B-9920</span></td>
+                <td><span class="badge badge-paid">Venta</span></td>
+                <td>Daniel Rivera</td>
+              </tr>
+              <tr>
+                <td>11/10/2026</td>
+                <td><strong>Tienda Piloto</strong></td>
+                <td><span class="mono-code">F110-B882-01CA</span></td>
+                <td><span class="badge badge-free">Gratuita</span></td>
+                <td>Carlos Gómez</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Recent Manual Income Table -->
+      <section class="section-card">
+        <div class="card-header">
+          <h2 class="card-heading">Ingresos manuales recientes</h2>
+          <a href="#ingresos" class="card-link">Ver registro →</a>
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Cliente</th>
+                <th>Monto</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>15/10/2026</td>
+                <td>El Ahorro</td>
+                <td><span class="currency-amount">$ 450.000 COP</span></td>
+                <td><span class="badge badge-paid">Pagado</span></td>
+              </tr>
+              <tr>
+                <td>13/10/2026</td>
+                <td>San Jorge</td>
+                <td><span class="currency-amount">$ 450.000 COP</span></td>
+                <td><span class="badge badge-paid">Pagado</span></td>
+              </tr>
+              <tr>
+                <td>10/10/2026</td>
+                <td>Restaurante Norte</td>
+                <td><span class="currency-amount">$ 450.000 COP</span></td>
+                <td><span class="badge badge-pending">Pendiente</span></td>
+              </tr>
+              <tr>
+                <td>08/10/2026</td>
+                <td>Ferretería Colón</td>
+                <td><span class="currency-amount">$ 450.000 COP</span></td>
+                <td><span class="badge badge-paid">Pagado</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- Bottom System Status -->
+    <footer class="system-bar">
+      <div>Servidor Dedicado: <strong>FRB-SRV-LAN-01</strong> · BD local activa</div>
+      <div>Firma: <strong>ECDSA P-256</strong> (Windows DPAPI)</div>
+    </footer>
+  </main>
+
+  <script>
+    function toggleSidebar(open) {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (open) {
+        sidebar.classList.add('open');
+        overlay.classList.add('active');
+      } else {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('active');
+      }
+    }
+
+    function switchRole(role) {
+      const btnTitular = document.getElementById('btn-role-titular');
+      const btnAdmin = document.getElementById('btn-role-admin');
+      const menuAdmins = document.getElementById('menu-administradores');
+      const uiUsername = document.getElementById('ui-username');
+      const uiRoleDesc = document.getElementById('ui-role-desc');
+      const uiAvatar = document.getElementById('ui-avatar');
+
+      if (role === 'titular') {
+        btnTitular.classList.add('active');
+        btnAdmin.classList.remove('active');
+        menuAdmins.style.display = 'block';
+        uiUsername.textContent = 'Daniel Rivera';
+        uiRoleDesc.textContent = 'Titular de la cuenta';
+        uiAvatar.textContent = 'DR';
+      } else {
+        btnAdmin.classList.add('active');
+        btnTitular.classList.remove('active');
+        menuAdmins.style.display = 'none';
+        uiUsername.textContent = 'Carlos Gómez';
+        uiRoleDesc.textContent = 'Administrador habilitado';
+        uiAvatar.textContent = 'CG';
+      }
+    }
+  </script>
+</body>
+</html>

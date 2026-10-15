@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — UI-09 Administradores (Exclusiva del Titular)</title>
+  <style>
+    :root {
+      /* Paleta Kirito */
+      --azul-noche: #101828;
+      --azul-electrico: #2563eb;
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;
+      --verde-activo: #16a34a;
+      --ambar-alerta: #d97706;
+      --rojo-desactivado: #dc2626;
+      
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-sidebar: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --sidebar-width: 250px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--blanco-frio);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* Top switcher toolbar: para verificar la regla estricta de seguridad */
+    .top-toolbar {
+      position: fixed;
+      top: 14px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+      z-index: 200;
+      font-size: 11px;
+    }
+
+    .role-btn {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: var(--text-muted);
+      padding: 4px 12px;
+      border-radius: 9999px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .role-btn.active {
+      background: var(--azul-noche);
+      border-color: var(--azul-noche);
+      color: #ffffff;
+    }
+
+    /* Backdrop overlay */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 24, 40, 0.6);
+      backdrop-filter: blur(2px);
+      z-index: 140;
+    }
+
+    /* Sidebar Navigation — Azul noche #101828 */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--azul-noche);
+      border-right: 1px solid var(--border-sidebar);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 150;
+      color: #ffffff;
+    }
+
+    .brand {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--border-sidebar);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-sub {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    .close-sidebar-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .nav-list {
+      list-style: none;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+
+    .nav-item a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .nav-item a:hover {
+      background: #1e293b;
+      color: #ffffff;
+    }
+
+    .nav-item.active a {
+      background: var(--azul-electrico);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .nav-item.titular-only {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+
+    .tag-role {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(217, 119, 6, 0.25);
+      color: #fbbf24;
+      font-weight: 700;
+      margin-left: auto;
+    }
+
+    .user-profile {
+      padding: 16px;
+      border-top: 1px solid var(--border-sidebar);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      color: #38bdf8;
+    }
+
+    .user-info {
+      flex-grow: 1;
+      overflow: hidden;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-role-text {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex-grow: 1;
+      padding: 32px 40px;
+      overflow-y: auto;
+      max-width: 1200px;
+    }
+
+    .mobile-header-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .hamburger-btn {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 28px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      letter-spacing: -0.02em;
+    }
+
+    .page-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .btn-primary-action {
+      background: var(--azul-electrico);
+      color: #ffffff;
+      border: none;
+      padding: 11px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+      transition: all 0.15s;
+    }
+
+    .btn-primary-action:hover {
+      background: var(--azul-electrico-hover);
+      transform: translateY(-1px);
+    }
+
+    /* Security Notice */
+    .security-banner {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 12px;
+      color: #1e40af;
+      line-height: 1.5;
+    }
+
+    /* 403 Forbidden State when non-owner accesses */
+    .forbidden-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 48px 32px;
+      text-align: center;
+      box-shadow: 0 4px 12px rgba(16, 24, 40, 0.05);
+      margin-top: 20px;
+    }
+
+    .forbidden-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .forbidden-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      margin-bottom: 8px;
+    }
+
+    .forbidden-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 460px;
+      margin: 0 auto 24px;
+      line-height: 1.5;
+    }
+
+    /* Table */
+    .table-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .table-container {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 12px;
+      min-width: 820px;
+    }
+
+    .data-table th {
+      background: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+    }
+
+    .data-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid #f1f5f9;
+      color: var(--text-main);
+      white-space: nowrap;
+    }
+
+    .data-table tr:hover td {
+      background: #f8fafc;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .badge-active {
+      background: #dcfce7;
+      color: var(--verde-activo);
+    }
+
+    .badge-inactive {
+      background: #fee2e2;
+      color: var(--rojo-desactivado);
+    }
+
+    .tag-owner {
+      background: #eff6ff;
+      border: 1px solid #dbeafe;
+      color: var(--azul-electrico);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      margin-left: 6px;
+    }
+
+    .btn-row-action {
+      background: none;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-right: 4px;
+    }
+
+    .btn-row-action:hover {
+      background: #f1f5f9;
+    }
+
+    .btn-row-action.danger {
+      color: var(--rojo-desactivado);
+      border-color: #fecaca;
+    }
+
+    .btn-row-action.danger:hover {
+      background: #fef2f2;
+    }
+
+    .btn-row-action.activate {
+      color: var(--verde-activo);
+      border-color: #bbf7d0;
+    }
+
+    .btn-row-action.activate:hover {
+      background: #f0fdf4;
+    }
+
+    /* Modal Form */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 24, 40, 0.6);
+      backdrop-filter: blur(3px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 300;
+      padding: 16px;
+    }
+
+    .modal-box {
+      background: #ffffff;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 480px;
+      padding: 28px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--azul-noche);
+    }
+
+    .btn-close-modal {
+      background: none;
+      border: none;
+      font-size: 20px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .modal-form-group {
+      margin-bottom: 16px;
+    }
+
+    .modal-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--azul-noche);
+      margin-bottom: 6px;
+    }
+
+    .modal-input {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .modal-input:focus {
+      border-color: var(--azul-electrico);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .btn-modal-cancel {
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .btn-modal-save {
+      background: var(--azul-electrico);
+      color: #ffffff;
+      border: none;
+      padding: 9px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .sidebar-overlay.active {
+        display: block;
+      }
+      .close-sidebar-btn {
+        display: block;
+      }
+      .mobile-header-bar {
+        display: flex;
+      }
+      .main-content {
+        padding: 16px;
+      }
+      .header-bar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .btn-primary-action {
+        width: 100%;
+        justify-content: center;
+      }
+      .top-toolbar {
+        top: auto;
+        bottom: 12px;
+        right: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+
+  <!-- Role Tester toolbar -->
+  <div class="top-toolbar">
+    <span style="color: var(--text-muted);">Ver como:</span>
+    <button class="role-btn active" id="btn-as-titular" onclick="setRoleView('titular')">Titular Principal (Daniel)</button>
+    <button class="role-btn" id="btn-as-socio" onclick="setRoleView('socio')">Co-Titular (Socio)</button>
+    <button class="role-btn" id="btn-as-admin" onclick="setRoleView('admin')">Admin (403 Restringido)</button>
+  </div>
+
+  <!-- Sidebar Kirito -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div>
+        <div class="brand-title">
+          <span style="color: var(--azul-electrico);">◆</span> FRUBBER
+        </div>
+        <div class="brand-sub">License Manager · Intranet</div>
+      </div>
+      <button class="close-sidebar-btn" onclick="toggleSidebar(false)">✕</button>
+    </div>
+
+    <ul class="nav-list">
+      <li class="nav-item">
+        <a href="#panel">
+          <span>📊</span> Resumen / Panel
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#clientes">
+          <span>🏢</span> Verdulerías / Clientes
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#licencias">
+          <span>🔑</span> Equipos y Licencias
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#ingresos">
+          <span>💵</span> Ingresos manuales
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#historial">
+          <span>🕒</span> Historial de cambios
+        </a>
+      </li>
+
+      <!-- Titular Only Item -->
+      <li class="nav-item titular-only active" id="menu-admins">
+        <a href="#administradores">
+          <span>👥</span> Administradores
+          <span class="tag-role">Titular</span>
+        </a>
+      </li>
+
+      <li class="nav-item">
+        <a href="#configuracion">
+          <span>⚙</span> Configuración
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#respaldo">
+          <span>🛡</span> Respaldo
+        </a>
+      </li>
+    </ul>
+
+    <div class="user-profile">
+      <div class="user-avatar" id="avatar-text">DR</div>
+      <div class="user-info">
+        <div class="user-name" id="user-name-text">Daniel Rivera</div>
+        <div class="user-role-text" id="role-desc-text">Titular de la cuenta</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="mobile-header-bar">
+      <button class="hamburger-btn" onclick="toggleSidebar(true)">☰ Menú</button>
+      <div style="font-size: 13px; font-weight: 700; color: var(--azul-noche);">FRUBBER · License Manager</div>
+    </div>
+
+    <!-- VISTA A: AUTORIZADO (TITULAR) -->
+    <div id="view-owner">
+      <div class="header-bar">
+        <div>
+          <h1 class="page-title">Gestión de Administradores y Seguridad</h1>
+          <p class="page-desc">Crea cuentas individuales para tus operadores o socios y gestiona la seguridad del sistema.</p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn-primary-action" style="background: #1e293b; border-color: #334155;" onclick="openOwnerSecurityModal()">
+            <span>🔑</span> Cambiar mi contraseña (Titular)
+          </button>
+          <button class="btn-primary-action" onclick="openCreateModal()">
+            <span>+</span> Crear nuevo usuario
+          </button>
+        </div>
+      </div>
+
+      <!-- Panel Exclusivo de Seguridad del Titular -->
+      <div style="background: #ffffff; border: 1px solid var(--border-subtle); border-radius: 12px; padding: 18px 20px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 44px; height: 44px; border-radius: 10px; background: rgba(37, 99, 235, 0.1); display: flex; align-items: center; justify-content: center; font-size: 20px;">
+            🔐
+          </div>
+          <div>
+            <div style="font-size: 14px; font-weight: 700; color: var(--azul-noche);">
+              Seguridad del Titular Principal (<span id="panel-owner-name">Daniel Rivera</span>)
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+              Tu cuenta tiene custodia de la clave privada criptográfica. Puedes actualizar tu contraseña de acceso en cualquier momento.
+            </div>
+          </div>
+        </div>
+        <div>
+          <button class="btn-row-action" style="background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; font-weight: 600; padding: 8px 16px; font-size: 12px;" onclick="openOwnerSecurityModal()">
+            Actualizar mi contraseña
+          </button>
+        </div>
+      </div>
+
+      <div class="security-banner">
+        <span style="font-size: 18px;">🛡</span>
+        <div>
+          <strong>Reglas de control del Titular:</strong>
+          Los administradores activos pueden emitir licencias para verdulerías y registrar cobros en COP, pero <strong>no tienen acceso a esta pantalla ni pueden gestionar a otros usuarios</strong>. Al desactivar a un administrador se revoca su inicio de sesión al instante, pero <strong>todas sus emisiones históricas se conservan registradas a su nombre</strong> para auditoría.
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Nombre del Operador</th>
+                <th>Correo de Acceso</th>
+                <th>Rol</th>
+                <th>Estado</th>
+                <th>Licencias Emitidas</th>
+                <th>Fecha de Alta</th>
+                <th>Acciones del Titular</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Fila 1: Daniel Rivera (Titular - Inmutable pero con cambio de clave) -->
+              <tr style="background: rgba(37, 99, 235, 0.02);">
+                <td>
+                  <strong>Daniel Rivera</strong>
+                  <span class="tag-owner">Titular Principal</span>
+                </td>
+                <td><code>titular@frubber.local</code></td>
+                <td><strong>Titular</strong></td>
+                <td><span class="badge badge-active">● Activo</span></td>
+                <td>18 licencias</td>
+                <td>14/10/2026</td>
+                <td>
+                  <button class="btn-row-action" style="border-color: #2563eb; color: #2563eb; font-weight: 600;" onclick="openOwnerSecurityModal()">Cambiar mi contraseña</button>
+                  <span style="font-size: 10px; color: var(--text-dim); display: block; margin-top: 2px;">Cuenta principal protegida</span>
+                </td>
+              </tr>
+
+              <!-- Fila 2: Carlos Gómez (Admin Activo) -->
+              <tr id="row-carlos">
+                <td>
+                  <strong id="name-carlos">Carlos Gómez</strong>
+                  <div style="font-size: 11px; color: var(--text-muted);">Operador de emisión</div>
+                </td>
+                <td><code>carlos.gomez@frubber.local</code></td>
+                <td>Administrador</td>
+                <td id="status-carlos"><span class="badge badge-active">● Activo</span></td>
+                <td>9 licencias</td>
+                <td>15/10/2026</td>
+                <td id="actions-carlos">
+                  <button class="btn-row-action" onclick="openResetModal('Carlos Gómez')">Restablecer clave</button>
+                  <button class="btn-row-action danger" onclick="toggleAdminStatus('carlos', false)">Desactivar</button>
+                </td>
+              </tr>
+
+              <!-- Fila 3: Andrea Restrepo (Admin Inactivo para probar reactivación) -->
+              <tr id="row-andrea">
+                <td>
+                  <strong id="name-andrea">Andrea Restrepo</strong>
+                  <div style="font-size: 11px; color: var(--text-muted);">Soporte técnico</div>
+                </td>
+                <td><code>andrea.r@frubber.local</code></td>
+                <td>Administrador</td>
+                <td id="status-andrea"><span class="badge badge-inactive">✕ Desactivado</span></td>
+                <td>4 licencias</td>
+                <td>15/10/2026</td>
+                <td id="actions-andrea">
+                  <button class="btn-row-action" onclick="openResetModal('Andrea Restrepo')">Restablecer clave</button>
+                  <button class="btn-row-action activate" onclick="toggleAdminStatus('andrea', true)">Activar cuenta</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VISTA B: 403 FORBIDDEN (CUANDO ENTRA UN ADMINISTRADOR NO TITULAR) -->
+    <div id="view-forbidden" class="forbidden-card hidden">
+      <div class="forbidden-icon">🔒</div>
+      <h2 class="forbidden-title">Acceso Restringido — Error 403</h2>
+      <p class="forbidden-desc">
+        Esta sección es de uso exclusivo del <strong>Titular de License Manager</strong>. Los administradores regulares no tienen autorización para ver ni gestionar cuentas de usuario.
+      </p>
+      <button class="btn-primary-action" onclick="setRoleView('titular')">
+        Regresar al Panel Principal
+      </button>
+    </div>
+  </main>
+
+  <!-- Modal Crear Administrador -->
+  <div class="modal-backdrop hidden" id="modal-create">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 class="modal-title">Crear Nuevo Administrador</h2>
+        <button class="btn-close-modal" onclick="closeModal('modal-create')">✕</button>
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Tipo de Usuario a Crear *</label>
+        <select class="modal-input" id="new-role" onchange="handleRoleChange()">
+          <option value="admin">Administrador Delegado (Operador de campo)</option>
+          <option value="titular">Co-Titular / Socio (Acceso Total y Copropietario)</option>
+        </select>
+        <div id="role-hint" style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+          El administrador delegado puede registrar clientes y emitir licencias, pero no puede administrar usuarios.
+        </div>
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Nombre completo *</label>
+        <input type="text" class="modal-input" id="new-name" placeholder="Ej. Juan Pérez">
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Correo electrónico (para inicio de sesión) *</label>
+        <input type="email" class="modal-input" id="new-email" placeholder="juan.perez@frubber.local">
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Contraseña inicial *</label>
+        <input type="password" class="modal-input" id="new-pass" placeholder="••••••••••••">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="closeModal('modal-create')">Cancelar</button>
+        <button class="btn-modal-save" id="btn-save-user" onclick="createAdmin()">Crear Administrador</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Restablecer Contraseña para Administradores -->
+  <div class="modal-backdrop hidden" id="modal-reset">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 class="modal-title">Restablecer Contraseña de Administrador</h2>
+        <button class="btn-close-modal" onclick="closeModal('modal-reset')">✕</button>
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Operador</label>
+        <input type="text" class="modal-input" id="reset-user-name" readonly style="background:#f8fafc;">
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Nueva contraseña provisional *</label>
+        <input type="password" class="modal-input" id="reset-new-pass" placeholder="Ingresa la nueva clave">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="closeModal('modal-reset')">Cancelar</button>
+        <button class="btn-modal-save" onclick="confirmReset()">Actualizar Contraseña</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Exclusivo: Cambiar Contraseña del Titular Principal -->
+  <div class="modal-backdrop hidden" id="modal-owner-security">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 class="modal-title">Seguridad · Cambiar mi Contraseña (Titular)</h2>
+        <button class="btn-close-modal" onclick="closeModal('modal-owner-security')">✕</button>
+      </div>
+
+      <div style="background: rgba(37, 99, 235, 0.08); border-left: 3px solid var(--azul-electrico); padding: 10px 14px; border-radius: 6px; font-size: 12px; margin-bottom: 16px;">
+        Esta contraseña protege el acceso principal a License Manager y la emisión de firmas criptográficas bajo DPAPI.
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Contraseña Actual *</label>
+        <input type="password" class="modal-input" id="owner-old-pass" placeholder="Ingresa tu clave actual">
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Nueva Contraseña Segura *</label>
+        <input type="password" class="modal-input" id="owner-new-pass" placeholder="Mínimo 8 caracteres alfanuméricos">
+      </div>
+
+      <div class="modal-form-group">
+        <label class="modal-label">Confirmar Nueva Contraseña *</label>
+        <input type="password" class="modal-input" id="owner-confirm-pass" placeholder="Repite la nueva clave">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="closeModal('modal-owner-security')">Cancelar</button>
+        <button class="btn-modal-save" onclick="confirmOwnerPasswordChange()">Guardar Nueva Contraseña</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleSidebar(open) {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (open) {
+        sidebar.classList.add('open');
+        overlay.classList.add('active');
+      } else {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('active');
+      }
+    }
+
+    // SIMULADOR DE ACCESO: TITULAR VS ADMIN
+    function setRoleView(role) {
+      const btnTitular = document.getElementById('btn-as-titular');
+      const btnSocio = document.getElementById('btn-as-socio');
+      const btnAdmin = document.getElementById('btn-as-admin');
+      const viewOwner = document.getElementById('view-owner');
+      const viewForbidden = document.getElementById('view-forbidden');
+      const menuAdmins = document.getElementById('menu-admins');
+      const avatarText = document.getElementById('avatar-text');
+      const nameText = document.getElementById('user-name-text');
+      const roleText = document.getElementById('role-desc-text');
+      const panelOwnerName = document.getElementById('panel-owner-name');
+
+      if (role === 'titular') {
+        btnTitular.classList.add('active');
+        if (btnSocio) btnSocio.classList.remove('active');
+        btnAdmin.classList.remove('active');
+        viewOwner.classList.remove('hidden');
+        viewForbidden.classList.add('hidden');
+        menuAdmins.classList.remove('hidden');
+        avatarText.textContent = 'DR';
+        nameText.textContent = 'Daniel Rivera';
+        roleText.textContent = 'Titular Principal';
+        if (panelOwnerName) panelOwnerName.textContent = 'Daniel Rivera';
+      } else if (role === 'socio') {
+        if (btnSocio) btnSocio.classList.add('active');
+        btnTitular.classList.remove('active');
+        btnAdmin.classList.remove('active');
+        viewOwner.classList.remove('hidden');
+        viewForbidden.classList.add('hidden');
+        menuAdmins.classList.remove('hidden');
+        avatarText.textContent = 'SC';
+        nameText.textContent = 'Socio Co-Titular';
+        roleText.textContent = 'Co-Titular / Socio';
+        if (panelOwnerName) panelOwnerName.textContent = 'Socio Co-Titular';
+      } else {
+        btnAdmin.classList.add('active');
+        btnTitular.classList.remove('active');
+        if (btnSocio) btnSocio.classList.remove('active');
+        viewOwner.classList.add('hidden');
+        viewForbidden.classList.remove('hidden'); // Comportamiento 403 estricto
+        menuAdmins.classList.add('hidden');
+        avatarText.textContent = 'CG';
+        nameText.textContent = 'Carlos Gómez';
+        roleText.textContent = 'Administrador habilitado';
+      }
+    }
+
+    // ACCIONES DE GESTIÓN
+    function toggleAdminStatus(user, activate) {
+      const statusCell = document.getElementById(`status-${user}`);
+      const actionsCell = document.getElementById(`actions-${user}`);
+      const userName = user === 'carlos' ? 'Carlos Gómez' : 'Andrea Restrepo';
+
+      if (activate) {
+        statusCell.innerHTML = '<span class="badge badge-active">● Activo</span>';
+        actionsCell.innerHTML = `
+          <button class="btn-row-action" onclick="openResetModal('${userName}')">Restablecer clave</button>
+          <button class="btn-row-action danger" onclick="toggleAdminStatus('${user}', false)">Desactivar</button>
+        `;
+        alert(`Cuenta de ${userName} activada. Ahora puede iniciar sesión y emitir licencias.`);
+      } else {
+        statusCell.innerHTML = '<span class="badge badge-inactive">✕ Desactivado</span>';
+        actionsCell.innerHTML = `
+          <button class="btn-row-action" onclick="openResetModal('${userName}')">Restablecer clave</button>
+          <button class="btn-row-action activate" onclick="toggleAdminStatus('${user}', true)">Activar cuenta</button>
+        `;
+        alert(`Cuenta de ${userName} desactivada al instante. No podrá acceder a la intranet, pero sus emisiones históricas se conservan intactas.`);
+      }
+    }
+
+    function openCreateModal() {
+      document.getElementById('modal-create').classList.remove('hidden');
+    }
+
+    function openResetModal(name) {
+      document.getElementById('reset-user-name').value = name;
+      document.getElementById('modal-reset').classList.remove('hidden');
+    }
+
+    function openOwnerSecurityModal() {
+      document.getElementById('owner-old-pass').value = '';
+      document.getElementById('owner-new-pass').value = '';
+      document.getElementById('owner-confirm-pass').value = '';
+      document.getElementById('modal-owner-security').classList.remove('hidden');
+    }
+
+    function confirmOwnerPasswordChange() {
+      const oldP = document.getElementById('owner-old-pass').value;
+      const newP = document.getElementById('owner-new-pass').value;
+      const confP = document.getElementById('owner-confirm-pass').value;
+
+      if (!oldP) {
+        alert('Por favor ingresa tu contraseña actual para confirmar tu identidad.');
+        return;
+      }
+      if (!newP || newP.length < 8) {
+        alert('La nueva contraseña debe tener al menos 8 caracteres.');
+        return;
+      }
+      if (newP !== confP) {
+        alert('La confirmación de la nueva contraseña no coincide.');
+        return;
+      }
+
+      alert('¡Contraseña del Titular actualizada exitosamente!\nSe ha generado el nuevo hash criptográfico (PBKDF2 / Argon2id) en el servidor.');
+      closeModal('modal-owner-security');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function handleRoleChange() {
+      const role = document.getElementById('new-role').value;
+      const hint = document.getElementById('role-hint');
+      const submitBtn = document.getElementById('btn-save-user');
+      if (role === 'titular') {
+        hint.innerHTML = '<strong style="color: var(--azul-electrico);">Co-Titular / Socio:</strong> Tendrá control total de License Manager, gestión de administradores, acceso a liquidaciones y reparto de utilidades.';
+        if (submitBtn) submitBtn.textContent = 'Crear Co-Titular (Socio)';
+      } else {
+        hint.innerHTML = 'El administrador delegado puede registrar clientes y emitir licencias, pero no puede administrar usuarios.';
+        if (submitBtn) submitBtn.textContent = 'Crear Administrador';
+      }
+    }
+
+    function createAdmin() {
+      const role = document.getElementById('new-role').value;
+      const name = document.getElementById('new-name').value;
+      const email = document.getElementById('new-email').value;
+      if (!name) {
+        alert('Por favor ingresa un nombre.');
+        return;
+      }
+      
+      const tbody = document.querySelector('.data-table tbody');
+      const newRow = document.createElement('tr');
+      
+      if (role === 'titular') {
+        newRow.style.background = 'rgba(37, 99, 235, 0.04)';
+        newRow.innerHTML = `
+          <td>
+            <strong>${name}</strong>
+            <span class="tag-owner" style="background: #1e3a8a; color: #93c5fd;">Co-Titular / Socio</span>
+            <div style="font-size: 11px; color: var(--text-muted);">Socio Propietario</div>
+          </td>
+          <td><code>${email || 'socio@frubber.local'}</code></td>
+          <td><strong style="color: var(--azul-electrico);">Co-Titular</strong></td>
+          <td><span class="badge badge-active">● Activo</span></td>
+          <td>0 licencias</td>
+          <td>15/10/2026</td>
+          <td>
+            <button class="btn-row-action" onclick="openResetModal('${name}')">Restablecer clave</button>
+            <span style="font-size: 11px; color: var(--text-muted); margin-left: 4px;">Cuenta Socio</span>
+          </td>
+        `;
+        alert(`¡Co-Titular (Socio) "${name}" creado con éxito!\nAhora cuenta con permisos de Propietario en License Manager para auditar el negocio, ver ingresos y liquidar repartos.`);
+      } else {
+        newRow.innerHTML = `
+          <td>
+            <strong>${name}</strong>
+            <div style="font-size: 11px; color: var(--text-muted);">Operador de emisión</div>
+          </td>
+          <td><code>${email || 'operador@frubber.local'}</code></td>
+          <td>Administrador</td>
+          <td><span class="badge badge-active">● Activo</span></td>
+          <td>0 licencias</td>
+          <td>15/10/2026</td>
+          <td>
+            <button class="btn-row-action" onclick="openResetModal('${name}')">Restablecer clave</button>
+            <button class="btn-row-action danger" onclick="alert('Función de desactivación activada')">Desactivar</button>
+          </td>
+        `;
+        alert(`Administrador delegado "${name}" creado con éxito.\nTiene permisos operativos para emitir licencias pero NO puede administrar usuarios ni ver liquidaciones.`);
+      }
+      
+      tbody.appendChild(newRow);
+      closeModal('modal-create');
+    }
+
+    function confirmReset() {
+      const name = document.getElementById('reset-user-name').value;
+      alert(`Contraseña de ${name} actualizada exitosamente por el Titular.`);
+      closeModal('modal-reset');
+    }
+  </script>
+</body>
+</html>

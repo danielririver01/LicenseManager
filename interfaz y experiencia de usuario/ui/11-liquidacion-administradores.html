@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — UI-11 Calculadora y Liquidación de Comisiones</title>
+  <style>
+    :root {
+      /* Paleta Kirito */
+      --azul-noche: #101828;
+      --azul-electrico: #2563eb;
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;
+      --verde-activo: #16a34a;
+      --ambar-alerta: #d97706;
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-sidebar: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --sidebar-width: 250px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--blanco-frio); color: var(--text-main); min-height: 100vh; display: flex; }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(16, 24, 40, 0.6); z-index: 140; }
+    .sidebar { width: var(--sidebar-width); background: var(--azul-noche); border-right: 1px solid var(--border-sidebar); display: flex; flex-direction: column; flex-shrink: 0; height: 100vh; position: sticky; top: 0; z-index: 150; color: #ffffff; }
+    .brand { padding: 24px 20px 20px; border-bottom: 1px solid var(--border-sidebar); display: flex; justify-content: space-between; align-items: center; }
+    .brand-title { font-size: 16px; font-weight: 700; color: #ffffff; display: flex; align-items: center; gap: 8px; }
+    .brand-sub { font-size: 10px; color: #94a3b8; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+    .close-sidebar-btn { display: none; background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; }
+    .nav-list { list-style: none; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }
+    .nav-item a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; color: #cbd5e1; text-decoration: none; font-size: 13px; font-weight: 500; }
+    .nav-item a:hover { background: #1e293b; color: #ffffff; }
+    .nav-item.active a { background: var(--azul-electrico); color: #ffffff; font-weight: 600; }
+    .nav-item.titular-only { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 8px; margin-top: 8px; }
+    .tag-role { font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(217, 119, 6, 0.25); color: #fbbf24; font-weight: 700; margin-left: auto; }
+    .user-profile { padding: 16px; border-top: 1px solid var(--border-sidebar); display: flex; align-items: center; gap: 10px; background: rgba(0, 0, 0, 0.15); }
+    .user-avatar { width: 34px; height: 34px; border-radius: 8px; background: #1e293b; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; color: #38bdf8; }
+    .user-name { font-size: 13px; font-weight: 600; color: #ffffff; }
+    .user-role-text { font-size: 11px; color: #94a3b8; }
+    
+    .main-content { flex-grow: 1; padding: 32px 40px; overflow-y: auto; max-width: 1300px; }
+    .mobile-header-bar { display: none; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .hamburger-btn { background: var(--surface-card); border: 1px solid var(--border-subtle); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .header-bar { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+    .page-title { font-size: 24px; font-weight: 700; color: var(--azul-noche); }
+    .page-desc { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+    
+    .btn-primary-action { background: var(--azul-electrico); color: #ffffff; border: none; padding: 11px 20px; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+    .btn-primary-action:hover { background: var(--azul-electrico-hover); }
+
+    /* Calculadora Card */
+    .calc-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 24px;
+      margin-bottom: 28px;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .calc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .calc-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .calc-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      align-items: flex-end;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--azul-noche);
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .form-input:focus, .form-select:focus {
+      border-color: var(--azul-electrico);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    /* Live Breakdown Result Box */
+    .breakdown-box {
+      margin-top: 20px;
+      padding: 18px 20px;
+      background: #f8fafc;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .breakdown-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .breakdown-lbl {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 600;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+
+    .breakdown-val {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--azul-noche);
+    }
+
+    /* Table */
+    .table-card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05); }
+    .table-container { overflow-x: auto; }
+    .data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; min-width: 860px; }
+    .data-table th { background: #f8fafc; color: var(--text-muted); font-weight: 600; padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); font-size: 11px; text-transform: uppercase; }
+    .data-table td { padding: 14px 18px; border-bottom: 1px solid #f1f5f9; }
+    .data-table tr:hover td { background: #f8fafc; }
+    
+    .badge { padding: 3px 8px; border-radius: 9999px; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; }
+    .badge-paid { background: #dcfce7; color: var(--verde-activo); }
+    .badge-pending { background: #fef3c7; color: var(--ambar-alerta); }
+
+    .btn-pay-action {
+      background: var(--verde-activo);
+      color: #ffffff;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-pay-action:hover { background: #15803d; }
+
+    /* Modal */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(16, 24, 40, 0.6); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; z-index: 300; padding: 16px; }
+    .modal-box { background: #ffffff; border-radius: 16px; width: 100%; max-width: 480px; padding: 28px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .modal-title { font-size: 17px; font-weight: 700; color: var(--azul-noche); }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-subtle); }
+    .hidden { display: none !important; }
+
+    @media (max-width: 950px) {
+      .calc-grid { grid-template-columns: 1fr 1fr; }
+      .breakdown-box { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 768px) {
+      .sidebar { position: fixed; left: 0; top: 0; bottom: 0; transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-overlay.active { display: block; }
+      .close-sidebar-btn { display: block; }
+      .mobile-header-bar { display: flex; }
+      .main-content { padding: 16px; }
+      .calc-grid { grid-template-columns: 1fr; }
+      .breakdown-box { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div>
+        <div class="brand-title"><span style="color: var(--azul-electrico);">◆</span> FRUBBER</div>
+        <div class="brand-sub">License Manager · Intranet</div>
+      </div>
+      <button class="close-sidebar-btn" onclick="toggleSidebar(false)">✕</button>
+    </div>
+    <ul class="nav-list">
+      <li class="nav-item"><a href="02-panel-dashboard.html"><span>📊</span> Resumen / Panel</a></li>
+      <li class="nav-item"><a href="03-verdulerias-clientes.html"><span>🏢</span> Verdulerías / Clientes</a></li>
+      <li class="nav-item"><a href="04-equipos-licencias.html"><span>🔑</span> Equipos y Licencias</a></li>
+      <li class="nav-item"><a href="07-ingresos-manuales.html"><span>💵</span> Ingresos y Cobros</a></li>
+      <li class="nav-item"><a href="07b-ingresos-mensuales.html"><span>📈</span> Cierres Mensuales</a></li>
+      <li class="nav-item titular-only"><a href="09-administradores.html"><span>👥</span> Administradores<span class="tag-role">Titular</span></a></li>
+      <li class="nav-item titular-only active"><a href="11-liquidacion-administradores.html"><span>⚖</span> Liquidación y Repartos<span class="tag-role">Titular</span></a></li>
+      <li class="nav-item"><a href="#configuracion"><span>⚙</span> Configuración</a></li>
+      <li class="nav-item"><a href="#respaldo"><span>🛡</span> Respaldo</a></li>
+    </ul>
+    <div class="user-profile">
+      <div class="user-avatar">DR</div>
+      <div class="user-info">
+        <div class="user-name">Daniel Rivera</div>
+        <div class="user-role-text">Titular de la cuenta</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <div class="mobile-header-bar">
+      <button class="hamburger-btn" onclick="toggleSidebar(true)">☰ Menú</button>
+      <div style="font-size: 13px; font-weight: 700; color: var(--azul-noche);">FRUBBER · License Manager</div>
+    </div>
+
+    <div class="header-bar">
+      <div>
+        <h1 class="page-title">Calculadora y Liquidación de Comisiones</h1>
+        <p class="page-desc">Formulario interactivo para que el Titular calcule y registre las comisiones exactas por ventas de cada administrador.</p>
+      </div>
+    </div>
+
+    <!-- FORMULARIO CALCULADORA DE COMISIONES (Lo que pedía el usuario) -->
+    <section class="calc-card">
+      <div class="calc-header">
+        <div class="calc-title">
+          <span>🧮</span> Formulario de Cálculo y Reparto de Ventas
+        </div>
+        <span style="font-size: 11px; color: var(--text-muted);">Tarifa base: $ 450.000 COP por licencia</span>
+      </div>
+
+      <div class="calc-grid">
+        <!-- 1. Seleccionar Administrador -->
+        <div class="form-group">
+          <label class="form-label" for="calc-admin">1. Administrador</label>
+          <select id="calc-admin" class="form-select" onchange="onAdminChange(this)">
+            <option value="carlos" data-sales="3" selected>Carlos Gómez (3 ventas registradas)</option>
+            <option value="andrea" data-sales="2">Andrea Restrepo (2 ventas registradas)</option>
+          </select>
+        </div>
+
+        <!-- 2. Cantidad de Licencias Vendidas -->
+        <div class="form-group">
+          <label class="form-label" for="calc-sales">2. Licencias cobradas</label>
+          <input type="number" id="calc-sales" class="form-input" value="3" min="1" max="100" oninput="calculateSplit()">
+        </div>
+
+        <!-- 3. Tipo de Reparto / Tajada -->
+        <div class="form-group">
+          <label class="form-label" for="calc-type">3. Tipo de comisión</label>
+          <select id="calc-type" class="form-select" onchange="calculateSplit()">
+            <option value="percent" selected>Porcentaje (%) por venta</option>
+            <option value="fixed">Valor fijo ($ COP) por licencia</option>
+          </select>
+        </div>
+
+        <!-- 4. Valor del reparto -->
+        <div class="form-group">
+          <label class="form-label" id="calc-rate-label" for="calc-rate">4. Porcentaje de comisión (%)</label>
+          <input type="number" id="calc-rate" class="form-input" value="30" oninput="calculateSplit()">
+        </div>
+      </div>
+
+      <!-- DESGLOSE EN TIEMPO REAL -->
+      <div class="breakdown-box">
+        <div class="breakdown-item">
+          <span class="breakdown-lbl">Total recaudado de verdulerías</span>
+          <span class="breakdown-val" id="res-total-gross">$ 1.350.000 COP</span>
+          <span style="font-size: 11px; color: var(--text-muted);" id="res-calc-desc">3 licencias × $ 450.000</span>
+        </div>
+
+        <div class="breakdown-item">
+          <span class="breakdown-lbl" style="color: var(--verde-activo);">Comisión del operador</span>
+          <span class="breakdown-val" style="color: var(--verde-activo);" id="res-admin-cut">$ 405.000 COP</span>
+          <span style="font-size: 11px; color: var(--text-muted);" id="res-admin-sub">30% ($ 135.000 c/u)</span>
+        </div>
+
+        <div class="breakdown-item">
+          <span class="breakdown-lbl" style="color: var(--azul-electrico);">Tu ganancia neta (Titular)</span>
+          <span class="breakdown-val" style="color: var(--azul-electrico);" id="res-owner-net">$ 945.000 COP</span>
+          <span style="font-size: 11px; color: var(--text-muted);">70% retenido para Frubber</span>
+        </div>
+
+        <div class="breakdown-item" style="justify-content: flex-end;">
+          <button class="btn-primary-action" style="padding: 9px 16px; font-size: 12px; width: 100%; justify-content: center;" onclick="applyCalculationToPayout()">
+            Aplicar y Pagar Comisión →
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORIAL DE LIQUIDACIONES Y PAGOS PENDIENTES -->
+    <div class="table-card">
+      <div style="padding: 16px 20px; border-bottom: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="font-size: 15px; font-weight: 700; color: var(--azul-noche);">Estado de Liquidación del Periodo (Octubre 2026)</h2>
+        <span style="font-size: 12px; color: var(--text-muted);">Pagos manuales con comprobante</span>
+      </div>
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Administrador</th>
+              <th>Ventas Realizadas</th>
+              <th>Total Facturado</th>
+              <th>Comisión Acordada</th>
+              <th>Comisión a Pagar</th>
+              <th>Estado</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr id="row-carlos">
+              <td>
+                <strong>Carlos Gómez</strong>
+                <div style="font-size: 11px; color: var(--text-muted);">carlos.gomez@frubber.local</div>
+              </td>
+              <td><span id="tab-carlos-sales">3 licencias</span></td>
+              <td><span id="tab-carlos-gross">$ 1.350.000 COP</span></td>
+              <td><span id="tab-carlos-rate">30% por venta</span></td>
+              <td><strong style="font-size: 14px; color: var(--azul-noche);" id="tab-carlos-cut">$ 405.000 COP</strong></td>
+              <td id="tab-carlos-st"><span class="badge badge-pending">⚠ Pendiente de pago</span></td>
+              <td id="tab-carlos-act">
+                <button class="btn-pay-action" onclick="openPayoutModal('Carlos Gómez', document.getElementById('tab-carlos-cut').textContent)">Registrar Pago</button>
+              </td>
+            </tr>
+
+            <tr>
+              <td>
+                <strong>Andrea Restrepo</strong>
+                <div style="font-size: 11px; color: var(--text-muted);">andrea.r@frubber.local</div>
+              </td>
+              <td>2 licencias</td>
+              <td>$ 900.000 COP</td>
+              <td>$ 100.000 fija / lic.</td>
+              <td><strong style="font-size: 14px; color: var(--azul-noche);">$ 200.000 COP</strong></td>
+              <td><span class="badge badge-paid">● Liquidado y Pagado</span></td>
+              <td><span style="font-size: 11px; color: var(--text-muted);">Pagado el 14/10 (Nequi #9910)</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal Confirmar Pago -->
+  <div class="modal-backdrop hidden" id="modal-pay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h2 class="modal-title">Registrar Pago de Comisión</h2>
+        <button style="background:none; border:none; font-size:20px; cursor:pointer;" onclick="closeModal()">✕</button>
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <label style="font-size: 12px; font-weight: 600; color: var(--azul-noche);">Operador</label>
+        <input type="text" id="modal-op-name" readonly style="width: 100%; padding: 9px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; background: #f8fafc;">
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <label style="font-size: 12px; font-weight: 600; color: var(--azul-noche);">Monto liquidado a pagar (COP)</label>
+        <input type="text" id="modal-op-amount" readonly style="width: 100%; padding: 9px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; font-weight: 700; color: var(--verde-activo); background: #f8fafc;">
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <label style="font-size: 12px; font-weight: 600; color: var(--azul-noche);">Canal de pago *</label>
+        <select id="modal-op-method" style="width: 100%; padding: 9px 12px; border: 1px solid var(--border-subtle); border-radius: 8px;">
+          <option>Transferencia Nequi</option>
+          <option>Daviplata</option>
+          <option>Bancolombia</option>
+          <option>Efectivo entregado</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom: 20px;">
+        <label style="font-size: 12px; font-weight: 600; color: var(--azul-noche);">Comprobante / Referencia de pago *</label>
+        <input type="text" id="modal-op-ref" placeholder="Ej. Nequi #849201" style="width: 100%; padding: 9px 12px; border: 1px solid var(--border-subtle); border-radius: 8px;">
+      </div>
+
+      <div class="modal-actions">
+        <button style="background:#fff; border:1px solid var(--border-subtle); padding:9px 16px; border-radius:8px; cursor:pointer;" onclick="closeModal()">Cancelar</button>
+        <button style="background:var(--verde-activo); color:#fff; border:none; padding:9px 20px; border-radius:8px; font-weight:600; cursor:pointer;" onclick="confirmPayment()">Sellar Liquidación</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleSidebar(open) {
+      document.getElementById('sidebar').classList.toggle('open', open);
+      document.getElementById('sidebar-overlay').classList.toggle('active', open);
+    }
+
+    const pricePerLicense = 450000;
+
+    function onAdminChange(sel) {
+      const sales = sel.options[sel.selectedIndex].getAttribute('data-sales');
+      document.getElementById('calc-sales').value = sales;
+      calculateSplit();
+    }
+
+    // FORMULARIO CALCULADORA EN VIVO
+    function calculateSplit() {
+      const salesCount = parseInt(document.getElementById('calc-sales').value) || 0;
+      const type = document.getElementById('calc-type').value;
+      const rateVal = parseFloat(document.getElementById('calc-rate').value) || 0;
+      const labelRate = document.getElementById('calc-rate-label');
+
+      const totalGross = salesCount * pricePerLicense;
+      let adminCut = 0;
+
+      if (type === 'percent') {
+        labelRate.textContent = '4. Porcentaje de comisión (%)';
+        adminCut = totalGross * (rateVal / 100);
+        document.getElementById('res-admin-sub').textContent = `${rateVal}% ($ ${new Intl.NumberFormat('es-CO').format(pricePerLicense * (rateVal/100))} c/u)`;
+      } else {
+        labelRate.textContent = '4. Valor fijo en pesos ($ COP)';
+        adminCut = salesCount * rateVal;
+        document.getElementById('res-admin-sub').textContent = `$ ${new Intl.NumberFormat('es-CO').format(rateVal)} fijo por licencia`;
+      }
+
+      const ownerNet = totalGross - adminCut;
+
+      document.getElementById('res-total-gross').textContent = `$ ${new Intl.NumberFormat('es-CO').format(totalGross)} COP`;
+      document.getElementById('res-calc-desc').textContent = `${salesCount} licencias × $ 450.000`;
+      document.getElementById('res-admin-cut').textContent = `$ ${new Intl.NumberFormat('es-CO').format(adminCut)} COP`;
+      document.getElementById('res-owner-net').textContent = `$ ${new Intl.NumberFormat('es-CO').format(ownerNet)} COP`;
+    }
+
+    function applyCalculationToPayout() {
+      const salesCount = document.getElementById('calc-sales').value;
+      const cutText = document.getElementById('res-admin-cut').textContent;
+      const grossText = document.getElementById('res-total-gross').textContent;
+      const type = document.getElementById('calc-type').value;
+      const rate = document.getElementById('calc-rate').value;
+
+      document.getElementById('tab-carlos-sales').textContent = `${salesCount} licencias`;
+      document.getElementById('tab-carlos-gross').textContent = grossText;
+      document.getElementById('tab-carlos-rate').textContent = type === 'percent' ? `${rate}% por venta` : `$ ${rate} fija`;
+      document.getElementById('tab-carlos-cut').textContent = cutText;
+
+      openPayoutModal('Carlos Gómez', cutText);
+    }
+
+    function openPayoutModal(name, cut) {
+      document.getElementById('modal-op-name').value = name;
+      document.getElementById('modal-op-amount').value = cut;
+      document.getElementById('modal-pay').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('modal-pay').classList.add('hidden');
+    }
+
+    function confirmPayment() {
+      const ref = document.getElementById('modal-op-ref').value;
+      if (!ref) {
+        alert('Por favor ingresa la referencia o comprobante de pago.');
+        return;
+      }
+      document.getElementById('tab-carlos-st').innerHTML = '<span class="badge badge-paid">● Liquidado y Pagado</span>';
+      document.getElementById('tab-carlos-act').innerHTML = `<span style="font-size: 11px; color: var(--text-muted); font-style: italic;">Pagado (${ref})</span>`;
+      alert('¡Pago de comisión registrado! La liquidación ha quedado sellada en el sistema.');
+      closeModal();
+    }
+  </script>
+</body>
+</html>

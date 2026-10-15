@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — UI-05 Emitir Licencia</title>
+  <style>
+    :root {
+      /* Paleta Kirito */
+      --azul-noche: #101828;
+      --azul-electrico: #2563eb;
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;
+      --verde-activo: #16a34a;
+      --ambar-alerta: #d97706;
+      
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-sidebar: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --danger: #ef4444;
+      --sidebar-width: 250px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--blanco-frio);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* Top switcher toolbar */
+    .top-toolbar {
+      position: fixed;
+      top: 14px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+      z-index: 200;
+      font-size: 11px;
+    }
+
+    .scenario-btn {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: var(--text-muted);
+      padding: 4px 12px;
+      border-radius: 9999px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .scenario-btn.active {
+      background: var(--azul-noche);
+      border-color: var(--azul-noche);
+      color: #ffffff;
+    }
+
+    /* Backdrop overlay */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 24, 40, 0.6);
+      backdrop-filter: blur(2px);
+      z-index: 140;
+    }
+
+    /* Sidebar Navigation — Azul noche #101828 */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--azul-noche);
+      border-right: 1px solid var(--border-sidebar);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 150;
+      color: #ffffff;
+    }
+
+    .brand {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--border-sidebar);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-sub {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    .close-sidebar-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .nav-list {
+      list-style: none;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+
+    .nav-item a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .nav-item a:hover {
+      background: #1e293b;
+      color: #ffffff;
+    }
+
+    .nav-item.active a {
+      background: var(--azul-electrico);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .nav-item.titular-only {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+
+    .tag-role {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(217, 119, 6, 0.25);
+      color: #fbbf24;
+      font-weight: 700;
+      margin-left: auto;
+    }
+
+    .user-profile {
+      padding: 16px;
+      border-top: 1px solid var(--border-sidebar);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      color: #38bdf8;
+    }
+
+    .user-info {
+      flex-grow: 1;
+      overflow: hidden;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-role-text {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex-grow: 1;
+      padding: 32px 40px;
+      overflow-y: auto;
+      max-width: 1050px;
+    }
+
+    .mobile-header-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .hamburger-btn {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .breadcrumb a {
+      color: var(--azul-electrico);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      letter-spacing: -0.02em;
+    }
+
+    .page-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      margin-bottom: 24px;
+    }
+
+    /* Steps Progress Bar */
+    .steps-nav {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .step-indicator {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .step-indicator.active {
+      border-color: var(--azul-electrico);
+      background: #eff6ff;
+      color: var(--azul-electrico);
+    }
+
+    .step-indicator.completed {
+      border-color: #bbf7d0;
+      background: #f0fdf4;
+      color: var(--verde-activo);
+    }
+
+    .step-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .step-indicator.active .step-num {
+      background: var(--azul-electrico);
+      color: #ffffff;
+    }
+
+    .step-indicator.completed .step-num {
+      background: var(--verde-activo);
+      color: #ffffff;
+    }
+
+    /* Form Container */
+    .emission-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 28px;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .section-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group.full-width {
+      grid-column: span 2;
+    }
+
+    .form-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--azul-noche);
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      outline: none;
+      transition: all 0.15s;
+    }
+
+    .form-input:focus, .form-select:focus {
+      border-color: var(--azul-electrico);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .form-input::placeholder {
+      color: var(--text-dim);
+    }
+
+    /* Hardware code input box */
+    .code-input-wrapper {
+      position: relative;
+    }
+
+    .code-input {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 16px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding-right: 110px;
+      font-weight: 700;
+      color: var(--azul-noche);
+    }
+
+    .code-validate-btn {
+      position: absolute;
+      right: 6px;
+      top: 6px;
+      bottom: 6px;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: var(--text-muted);
+      border-radius: 6px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .code-validate-btn:hover {
+      background: #e2e8f0;
+      color: var(--azul-noche);
+    }
+
+    .validation-hint {
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .validation-hint.valid {
+      color: var(--verde-activo);
+      font-weight: 600;
+    }
+
+    .validation-hint.warning {
+      color: var(--ambar-alerta);
+      font-weight: 600;
+    }
+
+    .hint-alert-box {
+      background: #fffbeb;
+      border: 1px solid #fef3c7;
+      padding: 12px 14px;
+      border-radius: 8px;
+      margin-top: 10px;
+      font-size: 12px;
+      color: #92400e;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    /* Summary confirmation box */
+    .summary-box {
+      background: #f8fafc;
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-top: 10px;
+      margin-bottom: 24px;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .summary-item-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+    }
+
+    .summary-item-val {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--azul-noche);
+    }
+
+    /* Action buttons */
+    .card-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-secondary:hover {
+      background: #f8fafc;
+      color: var(--text-main);
+    }
+
+    .btn-sign {
+      background: var(--azul-electrico);
+      border: none;
+      color: #ffffff;
+      padding: 11px 24px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-sign:hover {
+      background: var(--azul-electrico-hover);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+    }
+
+    /* Result Generated License Box */
+    .result-container {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 12px;
+      padding: 24px;
+      margin-top: 20px;
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .result-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--verde-activo);
+      color: #ffffff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+    }
+
+    .result-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--azul-noche);
+    }
+
+    .license-string-box {
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      color: var(--azul-noche);
+      word-break: break-all;
+      line-height: 1.5;
+      margin-bottom: 16px;
+    }
+
+    .btn-copy-action {
+      background: var(--verde-activo);
+      color: #ffffff;
+      border: none;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-copy-action:hover {
+      background: #15803d;
+    }
+
+    .security-note {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .sidebar-overlay.active {
+        display: block;
+      }
+      .close-sidebar-btn {
+        display: block;
+      }
+      .mobile-header-bar {
+        display: flex;
+      }
+      .main-content {
+        padding: 16px;
+      }
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+      .form-group.full-width {
+        grid-column: span 1;
+      }
+      .summary-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+      .steps-nav {
+        flex-direction: column;
+      }
+      .card-actions {
+        flex-direction: column-reverse;
+      }
+      .btn-secondary, .btn-sign {
+        width: 100%;
+        justify-content: center;
+      }
+      .top-toolbar {
+        top: auto;
+        bottom: 12px;
+        right: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+
+  <!-- Scenario switch widget -->
+  <div class="top-toolbar">
+    <span style="color: var(--text-muted);">Probar estado:</span>
+    <button class="scenario-btn active" id="btn-scen-form" onclick="setScenario('form')">1. Formulario Limpio</button>
+    <button class="scenario-btn" id="btn-scen-dup" onclick="setScenario('duplicate')">2. Código Repetido</button>
+    <button class="scenario-btn" id="btn-scen-res" onclick="setScenario('result')">3. Licencia Firmada</button>
+  </div>
+
+  <!-- Sidebar Kirito -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div>
+        <div class="brand-title">
+          <span style="color: var(--azul-electrico);">◆</span> FRUBBER
+        </div>
+        <div class="brand-sub">License Manager · Intranet</div>
+      </div>
+      <button class="close-sidebar-btn" onclick="toggleSidebar(false)">✕</button>
+    </div>
+
+    <ul class="nav-list">
+      <li class="nav-item">
+        <a href="#panel">
+          <span>📊</span> Resumen / Panel
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#clientes">
+          <span>🏢</span> Verdulerías / Clientes
+        </a>
+      </li>
+      <li class="nav-item active">
+        <a href="#licencias">
+          <span>🔑</span> Equipos y Licencias
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#ingresos">
+          <span>💵</span> Ingresos manuales
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#historial">
+          <span>🕒</span> Historial de cambios
+        </a>
+      </li>
+      <li class="nav-item titular-only">
+        <a href="#administradores">
+          <span>👥</span> Administradores
+          <span class="tag-role">Titular</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#configuracion">
+          <span>⚙</span> Configuración
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#respaldo">
+          <span>🛡</span> Respaldo
+        </a>
+      </li>
+    </ul>
+
+    <div class="user-profile">
+      <div class="user-avatar">DR</div>
+      <div class="user-info">
+        <div class="user-name">Daniel Rivera</div>
+        <div class="user-role-text">Titular de la cuenta</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="mobile-header-bar">
+      <button class="hamburger-btn" onclick="toggleSidebar(true)">☰ Menú</button>
+      <div style="font-size: 13px; font-weight: 700; color: var(--azul-noche);">FRUBBER · License Manager</div>
+    </div>
+
+    <div class="breadcrumb">
+      <a href="#licencias">Equipos y licencias</a>
+      <span>›</span>
+      <span>Emitir nueva licencia</span>
+    </div>
+
+    <h1 class="page-title">Emitir licencia Frubber POS</h1>
+    <p class="page-desc">Registra los datos de la verdulería/negocio, pega el código de equipo generado por el TPV y firma la licencia FRB1.</p>
+
+    <!-- Progress Steps -->
+    <div class="steps-nav">
+      <div class="step-indicator active" id="step-ind-1">
+        <span class="step-num">1</span>
+        <span>1. Verdulería y Operación</span>
+      </div>
+      <div class="step-indicator" id="step-ind-2">
+        <span class="step-num">2</span>
+        <span>2. Código de Equipo (16 Hex)</span>
+      </div>
+      <div class="step-indicator" id="step-ind-3">
+        <span class="step-num">3</span>
+        <span>3. Licencia Firmada FRB1</span>
+      </div>
+    </div>
+
+    <!-- Emission Form Card -->
+    <div class="emission-card" id="form-container">
+      
+      <!-- Paso 1: Datos de la Verdulería (Inicia limpio) -->
+      <div class="section-title">
+        <span>🥬</span> 1. Datos de la Verdulería o Negocio
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group full-width">
+          <label class="form-label" for="biz-name">Nombre de la verdulería o local *</label>
+          <input 
+            type="text" 
+            id="biz-name" 
+            class="form-input" 
+            placeholder="Ej. Verdulería y Frutería La Huerta, Frutas El Manantial..."
+            oninput="updateSummary()"
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="biz-owner">Nombre del responsable / propietario (opcional)</label>
+          <input 
+            type="text" 
+            id="biz-owner" 
+            class="form-input" 
+            placeholder="Ej. Pedro Gómez"
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="biz-phone">Teléfono / WhatsApp de contacto (opcional)</label>
+          <input 
+            type="tel" 
+            id="biz-phone" 
+            class="form-input" 
+            placeholder="Ej. +57 310 123 4567"
+          >
+        </div>
+      </div>
+
+      <!-- Operación y Cobro (Manual COP) -->
+      <div class="section-title" style="margin-top: 10px;">
+        <span>💰</span> Tipo de Operación e Ingreso
+      </div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label" for="op-category">Tipo de licencia</label>
+          <select class="form-select" id="op-category" onchange="handleCategoryChange(this)">
+            <option value="venta" selected>Venta estándar (Comercial)</option>
+            <option value="reemplazo">Reemplazo de PC/Balanza (Hardware)</option>
+            <option value="gratuita">Cortesía / Prueba piloto</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="group-amount">
+          <label class="form-label" for="op-amount">Importe cobrado (COP) *</label>
+          <input 
+            type="text" 
+            class="form-input" 
+            id="op-amount" 
+            value="450.000"
+            placeholder="0"
+            oninput="formatCurrency(this)"
+          >
+          <span style="font-size: 11px; color: var(--text-muted);">* Se registrará en la pestaña de Ingresos manuales en COP.</span>
+        </div>
+      </div>
+
+      <!-- Paso 2: Código de Equipo generado por Frubber POS -->
+      <div class="section-title" style="margin-top: 10px;">
+        <span>💻</span> 2. Código de Equipo (generado en el PC de la verdulería)
+      </div>
+
+      <div class="form-group" style="margin-bottom: 12px;">
+        <label class="form-label" for="hw-code-input">Pegar código de equipo (16 caracteres hexadecimales)</label>
+        <div class="code-input-wrapper">
+          <input 
+            type="text" 
+            id="hw-code-input" 
+            class="form-input code-input" 
+            placeholder="XXXX-XXXX-XXXX-XXXX"
+            maxlength="19"
+            oninput="formatHardwareCode(this)"
+          >
+          <button class="code-validate-btn" type="button" onclick="checkCode()">Verificar</button>
+        </div>
+        <div class="validation-hint" id="hint-valid">
+          Pega el código que muestra Frubber POS en la pantalla de activación del computador.
+        </div>
+
+        <!-- Warning si ya existe en la base local -->
+        <div class="hint-alert-box hidden" id="alert-duplicate">
+          <span style="font-size: 16px;">⚠</span>
+          <div>
+            <strong>Este equipo ya tiene una licencia registrada:</strong><br>
+            Corresponde a la verdulería <em>La Huerta Central</em> (Licencia emitida previamente).
+            <div style="margin-top: 6px;">
+              <a href="#ficha" style="color: #b45309; font-weight: 700; text-decoration: underline;">Abrir ficha existente del equipo →</a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resumen en tiempo real antes de firmar -->
+      <div class="summary-box">
+        <div class="summary-grid">
+          <div>
+            <div class="summary-item-label">Verdulería</div>
+            <div class="summary-item-val" id="sum-client">—</div>
+          </div>
+          <div>
+            <div class="summary-item-label">Código a firmar</div>
+            <div class="summary-item-val" style="font-family: monospace; color: var(--azul-electrico);" id="sum-code">----------------</div>
+          </div>
+          <div>
+            <div class="summary-item-label">Vigencia</div>
+            <div class="summary-item-val" style="color: var(--verde-activo);">Vitalicia (POS Offline)</div>
+          </div>
+          <div>
+            <div class="summary-item-label">Firma Backend</div>
+            <div class="summary-item-val">ECDSA P-256 (DPAPI)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Acciones -->
+      <div class="card-actions">
+        <button class="btn-secondary" onclick="resetForm()">Limpiar formulario</button>
+        <button class="btn-sign" onclick="simulateSign()">
+          <span>🔒</span> Generar y Firmar Licencia
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Paso 3: Resultado de Licencia Generada -->
+    <div class="result-container hidden" id="result-box">
+      <div class="result-header">
+        <div class="result-icon">✓</div>
+        <div>
+          <div class="result-title">Licencia FRB1 firmada exitosamente</div>
+          <div style="font-size: 12px; color: var(--text-muted);">
+            Emisión guardada en base de datos local · ID: <strong>LIC-2026-0033</strong> · Verdulería: <strong id="res-biz-name">La Huerta Central</strong>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size: 12px; font-weight: 600; color: var(--azul-noche); margin-bottom: 6px;">
+        Texto de la licencia para entregar (copiar y enviar al cliente):
+      </div>
+
+      <div class="license-string-box" id="license-full-text">
+        FRB1|k2026a|A4B9C102E8F37B1A|2026-10-15.MEQCIF5j9xQxLq83vZp219x8K1A49B88019Fbc76AA23AiA90Bfe8923a10984cca901239aafe098231c9a109
+      </div>
+
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <button class="btn-copy-action" onclick="copyLicense()">
+          <span>📋</span> Copiar licencia al portapapeles
+        </button>
+        <button class="btn-secondary" onclick="setScenario('form')">
+          + Emitir otra licencia
+        </button>
+        <button class="btn-secondary" onclick="alert('Abriendo ficha UI-06...')">
+          Ver registro en base de datos →
+        </button>
+      </div>
+
+      <div class="security-note">
+        <span>🔒</span>
+        <span>La llave privada ECDSA P-256 está protegida por DPAPI CurrentUser en la cuenta de servicio Windows del servidor local.</span>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    function toggleSidebar(open) {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (open) {
+        sidebar.classList.add('open');
+        overlay.classList.add('active');
+      } else {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('active');
+      }
+    }
+
+    function updateSummary() {
+      const name = document.getElementById('biz-name').value.trim();
+      document.getElementById('sum-client').textContent = name || '—';
+    }
+
+    function formatCurrency(input) {
+      let val = input.value.replace(/\D/g, '');
+      if (val) {
+        input.value = new Intl.NumberFormat('es-CO').format(val);
+      } else {
+        input.value = '';
+      }
+    }
+
+    function handleCategoryChange(sel) {
+      const groupAmount = document.getElementById('group-amount');
+      const amountInput = document.getElementById('op-amount');
+      if (sel.value === 'gratuita' || sel.value === 'reemplazo') {
+        amountInput.value = '0';
+      } else {
+        amountInput.value = '450.000';
+      }
+    }
+
+    function formatHardwareCode(input) {
+      // Filtrar a hexadecimal estricto (0-9, A-F)
+      let val = input.value.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+      if (val.length > 16) val = val.substring(0, 16);
+      
+      // Visualmente agrupar en bloques de 4: XXXX-XXXX-XXXX-XXXX
+      let formatted = val.match(/.{1,4}/g)?.join('-') || val;
+      input.value = formatted;
+
+      document.getElementById('sum-code').textContent = val || '----------------';
+      
+      const hint = document.getElementById('hint-valid');
+      if (val.length === 16) {
+        hint.textContent = '✓ Código de 16 caracteres hexadecimales detectado correctamente.';
+        hint.className = 'validation-hint valid';
+      } else if (val.length > 0) {
+        hint.textContent = `Faltan ${16 - val.length} caracteres para completar los 16 hex.`;
+        hint.className = 'validation-hint warning';
+      } else {
+        hint.textContent = 'Pega el código que muestra Frubber POS en la pantalla de activación del computador.';
+        hint.className = 'validation-hint';
+      }
+    }
+
+    function resetForm() {
+      document.getElementById('biz-name').value = '';
+      document.getElementById('biz-owner').value = '';
+      document.getElementById('biz-phone').value = '';
+      document.getElementById('hw-code-input').value = '';
+      document.getElementById('sum-client').textContent = '—';
+      document.getElementById('sum-code').textContent = '----------------';
+      document.getElementById('hint-valid').textContent = 'Pega el código que muestra Frubber POS en la pantalla de activación del computador.';
+      document.getElementById('hint-valid').className = 'validation-hint';
+    }
+
+    function setScenario(scen) {
+      const formBox = document.getElementById('form-container');
+      const resultBox = document.getElementById('result-box');
+      const alertDup = document.getElementById('alert-duplicate');
+      const ind1 = document.getElementById('step-ind-1');
+      const ind2 = document.getElementById('step-ind-2');
+      const ind3 = document.getElementById('step-ind-3');
+
+      document.getElementById('btn-scen-form').classList.remove('active');
+      document.getElementById('btn-scen-dup').classList.remove('active');
+      document.getElementById('btn-scen-res').classList.remove('active');
+
+      if (scen === 'form') {
+        document.getElementById('btn-scen-form').classList.add('active');
+        formBox.classList.remove('hidden');
+        resultBox.classList.add('hidden');
+        alertDup.classList.add('hidden');
+        ind1.className = 'step-indicator active';
+        ind2.className = 'step-indicator';
+        ind3.className = 'step-indicator';
+      } else if (scen === 'duplicate') {
+        document.getElementById('btn-scen-dup').classList.add('active');
+        formBox.classList.remove('hidden');
+        resultBox.classList.add('hidden');
+        alertDup.classList.remove('hidden');
+        // Rellenar datos de prueba
+        document.getElementById('biz-name').value = 'Verdulería La Huerta Central';
+        document.getElementById('hw-code-input').value = 'A4B9-C102-E8F3-7B1A';
+        formatHardwareCode(document.getElementById('hw-code-input'));
+        updateSummary();
+      } else if (scen === 'result') {
+        document.getElementById('btn-scen-res').classList.add('active');
+        formBox.classList.add('hidden');
+        resultBox.classList.remove('hidden');
+        ind1.className = 'step-indicator completed';
+        ind2.className = 'step-indicator completed';
+        ind3.className = 'step-indicator active';
+        const name = document.getElementById('biz-name').value.trim();
+        if (name) {
+          document.getElementById('res-biz-name').textContent = name;
+        }
+      }
+    }
+
+    function simulateSign() {
+      const codeVal = document.getElementById('hw-code-input').value.replace(/[^0-9a-fA-F]/g, '');
+      const bizName = document.getElementById('biz-name').value.trim();
+      
+      if (!bizName) {
+        alert('Por favor ingresa el nombre de la verdulería o negocio.');
+        document.getElementById('biz-name').focus();
+        return;
+      }
+      if (codeVal.length !== 16) {
+        alert('El código de equipo debe tener exactamente 16 caracteres hexadecimales.');
+        document.getElementById('hw-code-input').focus();
+        return;
+      }
+
+      setScenario('result');
+    }
+
+    function copyLicense() {
+      const text = document.getElementById('license-full-text').innerText.trim();
+      navigator.clipboard.writeText(text).then(() => {
+        alert('¡Licencia FRB1 copiada al portapapeles! Lista para entregar a la verdulería.');
+      }).catch(() => {
+        alert('Licencia lista: ' + text);
+      });
+    }
+
+    function checkCode() {
+      const val = document.getElementById('hw-code-input').value.replace(/[^0-9a-fA-F]/g, '');
+      if (val.length === 16) {
+        alert('Base de datos local: Código verificado. No hay conflictos previos.');
+      } else {
+        alert('Ingresa primero los 16 caracteres para verificar.');
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — UI-01 & UI-01B Prototipo Interactivo</title>
+  <style>
+    :root {
+      /* Paleta oficial Kirito */
+      --azul-noche: #101828;      /* Encabezados, títulos principales y marca */
+      --azul-electrico: #2563eb;  /* Botones primarios y elementos interactivos */
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;     /* Fondo general de la página */
+      --verde-activo: #16a34a;    /* Estado correcto, verificaciones */
+      --ambar-alerta: #d97706;    /* Advertencias */
+      
+      /* Superficies y tipografía */
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-focus: #2563eb;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      
+      /* Alertas */
+      --danger-bg: #fef2f2;
+      --danger-border: #fecaca;
+      --danger-text: #991b1b;
+      
+      --info-bg: #eff6ff;
+      --info-border: #bfdbfe;
+      --info-text: #1e40af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--blanco-frio);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    /* Selector de pruebas */
+    .state-switcher {
+      position: fixed;
+      top: 16px;
+      display: flex;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      padding: 6px;
+      border-radius: 9999px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+      z-index: 100;
+    }
+
+    .state-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .state-btn:hover {
+      color: var(--azul-noche);
+    }
+
+    .state-btn.active {
+      background: var(--azul-noche);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    /* Contenedor central */
+    .app-container {
+      width: 100%;
+      max-width: 440px;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .brand-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--azul-electrico);
+      background: #eff6ff;
+      border: 1px solid #dbeafe;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      margin-bottom: 12px;
+    }
+
+    .brand-title {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--azul-noche);
+      margin-bottom: 4px;
+    }
+
+    .brand-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .auth-card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 4px 20px -2px rgba(16, 24, 40, 0.06), 0 2px 6px -1px rgba(16, 24, 40, 0.04);
+    }
+
+    .card-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--azul-noche);
+    }
+
+    .card-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 22px;
+      line-height: 1.4;
+    }
+
+    /* Alertas */
+    .alert-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.4;
+      margin-bottom: 20px;
+    }
+
+    .alert-banner.error {
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-border);
+      color: var(--danger-text);
+    }
+
+    .alert-banner.info {
+      background: var(--info-bg);
+      border: 1px solid var(--info-border);
+      color: var(--info-text);
+    }
+
+    .alert-icon {
+      flex-shrink: 0;
+      font-weight: bold;
+    }
+
+    /* Formularios */
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--azul-noche);
+      margin-bottom: 6px;
+    }
+
+    .form-input {
+      width: 100%;
+      background: #ffffff;
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 11px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+
+    .form-input:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .form-input::placeholder {
+      color: var(--text-dim);
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: var(--azul-electrico);
+      color: #ffffff;
+      border: none;
+      padding: 12px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.05s ease;
+      margin-top: 6px;
+      box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+    }
+
+    .btn-submit:hover {
+      background: var(--azul-electrico-hover);
+      box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+    }
+
+    .btn-submit:active {
+      transform: scale(0.99);
+    }
+
+    .footer-note {
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border-subtle);
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .system-status {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      background: var(--verde-activo);
+      border-radius: 50%;
+      box-shadow: 0 0 6px rgba(22, 163, 74, 0.6);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 480px) {
+      .state-switcher {
+        top: auto;
+        bottom: 12px;
+        font-size: 11px;
+      }
+      .system-status {
+        margin-bottom: 60px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Switcher para probar estados -->
+  <div class="state-switcher">
+    <button class="state-btn active" onclick="setViewState('login-default')">1. Login Normal</button>
+    <button class="state-btn" onclick="setViewState('login-error')">2. Error Credenciales</button>
+    <button class="state-btn" onclick="setViewState('setup-owner')">3. Primer Arranque (Titular)</button>
+  </div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="brand-header">
+      <div class="brand-badge">
+        <span>LAN Privada</span> · <span>Servidor Dedicado</span>
+      </div>
+      <h1 class="brand-title">FRUBBER</h1>
+      <p class="brand-subtitle">License Manager · Acceso a Intranet</p>
+    </header>
+
+    <!-- VIEW A: Standard Login (UI-01) -->
+    <main id="view-login" class="auth-card">
+      <h2 class="card-title">Iniciar sesión</h2>
+      <p class="card-desc">Acceso exclusivo para Titular y Administradores autorizados.</p>
+
+      <!-- Alert state container -->
+      <div id="login-alert" class="alert-banner error hidden">
+        <span class="alert-icon">⚠</span>
+        <span id="login-alert-text">Correo electrónico o contraseña incorrectos.</span>
+      </div>
+
+      <form onsubmit="handleLogin(event)">
+        <div class="form-group">
+          <label class="form-label" for="login-email">Correo electrónico</label>
+          <input 
+            type="email" 
+            id="login-email" 
+            class="form-input" 
+            placeholder="ejemplo@negocio.local" 
+            required 
+            autocomplete="email"
+            value="titular@frubber.local"
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="login-password">Contraseña</label>
+          <input 
+            type="password" 
+            id="login-password" 
+            class="form-input" 
+            placeholder="••••••••••••" 
+            required
+            value="ContraseñaSegura123!"
+          >
+        </div>
+
+        <button type="submit" class="btn-submit">
+          Ingresar al sistema
+        </button>
+      </form>
+
+      <div class="footer-note">
+        <strong>¿Problemas para acceder?</strong><br>
+        Si eres administrador, solicita el restablecimiento directamente al titular.
+      </div>
+    </main>
+
+    <!-- VIEW B: Owner Setup on clean install (UI-01B) -->
+    <main id="view-setup" class="auth-card hidden">
+      <h2 class="card-title">Configuración inicial del Titular</h2>
+      <p class="card-desc">No se encontraron usuarios registrados. Crea la cuenta principal con privilegios de titular.</p>
+
+      <div class="alert-banner info">
+        <span class="alert-icon">ℹ</span>
+        <span>Esta pantalla solo se muestra una única vez. El titular podrá crear administradores una vez iniciada la sesión.</span>
+      </div>
+
+      <form onsubmit="handleSetup(event)">
+        <div class="form-group">
+          <label class="form-label" for="setup-name">Nombre completo</label>
+          <input 
+            type="text" 
+            id="setup-name" 
+            class="form-input" 
+            placeholder="Daniel Rivera" 
+            required 
+            value="Daniel Rivera"
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="setup-email">Correo electrónico corporativo</label>
+          <input 
+            type="email" 
+            id="setup-email" 
+            class="form-input" 
+            placeholder="titular@negocio.local" 
+            required
+            value="titular@frubber.local"
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="setup-password">Contraseña maestra</label>
+          <input 
+            type="password" 
+            id="setup-password" 
+            class="form-input" 
+            placeholder="Mínimo 8 caracteres" 
+            required
+            value="SuperClaveSegura2026!"
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="setup-confirm">Confirmar contraseña</label>
+          <input 
+            type="password" 
+            id="setup-confirm" 
+            class="form-input" 
+            placeholder="Repite la contraseña" 
+            required
+            value="SuperClaveSegura2026!"
+          >
+        </div>
+
+        <button type="submit" class="btn-submit">
+          Crear cuenta de Titular e Ingresar
+        </button>
+      </form>
+
+      <div class="footer-note">
+        El servicio Windows DPAPI del servidor resguardará la sesión y las llaves maestras en este equipo local.
+      </div>
+    </main>
+
+    <!-- System status indicator -->
+    <div class="system-status">
+      <span class="status-dot"></span>
+      <span>Servidor local activo en intranet · DPAPI protegido</span>
+    </div>
+  </div>
+
+  <script>
+    function setViewState(state) {
+      const buttons = document.querySelectorAll('.state-btn');
+      buttons.forEach(btn => btn.classList.remove('active'));
+
+      const viewLogin = document.getElementById('view-login');
+      const viewSetup = document.getElementById('view-setup');
+      const loginAlert = document.getElementById('login-alert');
+      const loginAlertText = document.getElementById('login-alert-text');
+
+      if (state === 'login-default') {
+        buttons[0].classList.add('active');
+        viewLogin.classList.remove('hidden');
+        viewSetup.classList.add('hidden');
+        loginAlert.classList.add('hidden');
+      } else if (state === 'login-error') {
+        buttons[1].classList.add('active');
+        viewLogin.classList.remove('hidden');
+        viewSetup.classList.add('hidden');
+        loginAlert.className = 'alert-banner error';
+        loginAlertText.textContent = 'Correo electrónico o contraseña incorrectos.';
+        loginAlert.classList.remove('hidden');
+      } else if (state === 'setup-owner') {
+        buttons[2].classList.add('active');
+        viewLogin.classList.add('hidden');
+        viewSetup.classList.remove('hidden');
+      }
+    }
+
+    function handleLogin(e) {
+      e.preventDefault();
+      alert('Simulación: Autenticación exitosa. Redirigiendo a UI-02 (Panel)...');
+    }
+
+    function handleSetup(e) {
+      e.preventDefault();
+      const p1 = document.getElementById('setup-password').value;
+      const p2 = document.getElementById('setup-confirm').value;
+      if (p1 !== p2) {
+        alert('Las contraseñas no coinciden.');
+        return;
+      }
+      alert('Simulación: Titular configurado correctamente en base de datos local. Creando sesión y redirigiendo a UI-02 (Panel)...');
+      setViewState('login-default');
+    }
+  </script>
+</body>
+</html>

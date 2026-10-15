@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — UI-08 Historial de Auditoría</title>
+  <style>
+    :root {
+      --azul-noche: #101828;
+      --azul-electrico: #2563eb;
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;
+      --verde-activo: #16a34a;
+      --ambar-alerta: #d97706;
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-sidebar: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --sidebar-width: 250px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--blanco-frio); color: var(--text-main); min-height: 100vh; display: flex; }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(16, 24, 40, 0.6); z-index: 140; }
+    .sidebar { width: var(--sidebar-width); background: var(--azul-noche); border-right: 1px solid var(--border-sidebar); display: flex; flex-direction: column; flex-shrink: 0; height: 100vh; position: sticky; top: 0; z-index: 150; color: #ffffff; }
+    .brand { padding: 24px 20px 20px; border-bottom: 1px solid var(--border-sidebar); display: flex; justify-content: space-between; align-items: center; }
+    .brand-title { font-size: 16px; font-weight: 700; color: #ffffff; display: flex; align-items: center; gap: 8px; }
+    .brand-sub { font-size: 10px; color: #94a3b8; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+    .close-sidebar-btn { display: none; background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; }
+    .nav-list { list-style: none; padding: 16px 12px; display: flex; flex-direction: column; gap: 4px; flex-grow: 1; }
+    .nav-item a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; color: #cbd5e1; text-decoration: none; font-size: 13px; font-weight: 500; }
+    .nav-item a:hover { background: #1e293b; color: #ffffff; }
+    .nav-item.active a { background: var(--azul-electrico); color: #ffffff; font-weight: 600; }
+    .nav-item.titular-only { border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 8px; margin-top: 8px; }
+    .tag-role { font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(217, 119, 6, 0.25); color: #fbbf24; font-weight: 700; margin-left: auto; }
+    .user-profile { padding: 16px; border-top: 1px solid var(--border-sidebar); display: flex; align-items: center; gap: 10px; background: rgba(0, 0, 0, 0.15); }
+    .user-avatar { width: 34px; height: 34px; border-radius: 8px; background: #1e293b; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; color: #38bdf8; }
+    .user-name { font-size: 13px; font-weight: 600; color: #ffffff; }
+    .user-role-text { font-size: 11px; color: #94a3b8; }
+    
+    .main-content { flex-grow: 1; padding: 32px 40px; overflow-y: auto; max-width: 1250px; }
+    .mobile-header-bar { display: none; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .hamburger-btn { background: var(--surface-card); border: 1px solid var(--border-subtle); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .header-bar { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
+    .page-title { font-size: 24px; font-weight: 700; color: var(--azul-noche); }
+    .page-desc { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    .filter-bar { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+    .search-input { flex: 1; min-width: 240px; background: #f8fafc; border: 1px solid var(--border-subtle); padding: 9px 14px; border-radius: 8px; font-size: 13px; outline: none; }
+    .filter-select { background: #f8fafc; border: 1px solid var(--border-subtle); padding: 9px 14px; border-radius: 8px; font-size: 13px; }
+
+    .table-card { background: var(--surface-card); border: 1px solid var(--border-subtle); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05); }
+    .table-container { overflow-x: auto; }
+    .data-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; min-width: 820px; }
+    .data-table th { background: #f8fafc; color: var(--text-muted); font-weight: 600; padding: 12px 18px; border-bottom: 1px solid var(--border-subtle); font-size: 11px; text-transform: uppercase; }
+    .data-table td { padding: 14px 18px; border-bottom: 1px solid #f1f5f9; }
+    
+    .event-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+    .event-emission { background: #eff6ff; color: var(--azul-electrico); border: 1px solid #dbeafe; }
+    .event-payment { background: #dcfce7; color: var(--verde-activo); border: 1px solid #bbf7d0; }
+    .event-admin { background: #fef3c7; color: var(--ambar-alerta); border: 1px solid #fde68a; }
+    
+    @media (max-width: 768px) {
+      .sidebar { position: fixed; left: 0; top: 0; bottom: 0; transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-overlay.active { display: block; }
+      .close-sidebar-btn { display: block; }
+      .mobile-header-bar { display: flex; }
+      .main-content { padding: 16px; }
+      .header-bar { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div>
+        <div class="brand-title"><span style="color: var(--azul-electrico);">◆</span> FRUBBER</div>
+        <div class="brand-sub">License Manager · Intranet</div>
+      </div>
+      <button class="close-sidebar-btn" onclick="toggleSidebar(false)">✕</button>
+    </div>
+    <ul class="nav-list">
+      <li class="nav-item"><a href="02-panel-dashboard.html"><span>📊</span> Resumen / Panel</a></li>
+      <li class="nav-item"><a href="03-verdulerias-clientes.html"><span>🏢</span> Verdulerías / Clientes</a></li>
+      <li class="nav-item"><a href="04-equipos-licencias.html"><span>🔑</span> Equipos y Licencias</a></li>
+      <li class="nav-item"><a href="07-ingresos-manuales.html"><span>💵</span> Ingresos y Cobros</a></li>
+      <li class="nav-item active"><a href="08-historial-auditoria.html"><span>🕒</span> Historial de cambios</a></li>
+      <li class="nav-item titular-only"><a href="09-administradores.html"><span>👥</span> Administradores<span class="tag-role">Titular</span></a></li>
+      <li class="nav-item"><a href="#configuracion"><span>⚙</span> Configuración</a></li>
+      <li class="nav-item"><a href="#respaldo"><span>🛡</span> Respaldo</a></li>
+    </ul>
+    <div class="user-profile">
+      <div class="user-avatar">DR</div>
+      <div class="user-info">
+        <div class="user-name">Daniel Rivera</div>
+        <div class="user-role-text">Titular de la cuenta</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <div class="mobile-header-bar">
+      <button class="hamburger-btn" onclick="toggleSidebar(true)">☰ Menú</button>
+      <div style="font-size: 13px; font-weight: 700; color: var(--azul-noche);">FRUBBER · License Manager</div>
+    </div>
+
+    <div class="header-bar">
+      <div>
+        <h1 class="page-title">Historial de Auditoría del Sistema</h1>
+        <p class="page-desc">Pista inmutable de eventos con timestamp automático del servidor y usuario responsable.</p>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <input type="text" class="search-input" placeholder="Buscar por usuario, evento o detalle...">
+      <select class="filter-select">
+        <option>Todos los eventos</option>
+        <option>Emisiones de licencias</option>
+        <option>Registros de cobro</option>
+        <option>Gestión de usuarios</option>
+      </select>
+    </div>
+
+    <div class="table-card">
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Timestamp del Servidor</th>
+              <th>Operador</th>
+              <th>Tipo de Evento</th>
+              <th>Entidad / Negocio</th>
+              <th>Detalle de la Operación</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>15/10/2026 · 10:26:14 AM</td>
+              <td><strong>Daniel Rivera</strong> (Titular)</td>
+              <td><span class="event-badge event-payment">💰 Cobro registrado</span></td>
+              <td>Verdulería La Huerta</td>
+              <td>Registrado pago manual de $ 450.000 COP (Transferencia). Cronómetro detenido.</td>
+            </tr>
+            <tr>
+              <td>15/10/2026 · 10:24:02 AM</td>
+              <td><strong>Daniel Rivera</strong> (Titular)</td>
+              <td><span class="event-badge event-emission">🔑 Emisión FRB1</span></td>
+              <td>Verdulería La Huerta</td>
+              <td>Firma ECDSA P-256 generada para hardware <code>A4B9-C102-E8F3-7B1A</code>.</td>
+            </tr>
+            <tr>
+              <td>15/10/2026 · 09:12:45 AM</td>
+              <td><strong>Daniel Rivera</strong> (Titular)</td>
+              <td><span class="event-badge event-admin">👥 Admin Creado</span></td>
+              <td>Carlos Gómez</td>
+              <td>Cuenta de operador creada y activada con correo <code>carlos.gomez@frubber.local</code>.</td>
+            </tr>
+            <tr>
+              <td>14/10/2026 · 04:15:30 PM</td>
+              <td><strong>Carlos Gómez</strong> (Admin)</td>
+              <td><span class="event-badge event-emission">🔑 Emisión FRB1</span></td>
+              <td>Frutas El Manantial</td>
+              <td>Reemplazo de PC registrado para balanza (Hardware averiado).</td>
+            </tr>
+            <tr>
+              <td>14/10/2026 · 08:00:10 AM</td>
+              <td><strong>Daniel Rivera</strong> (Titular)</td>
+              <td><span class="event-badge event-admin">⚡ Inicialización</span></td>
+              <td>Sistema</td>
+              <td>Asistente de primer arranque completado. Cuenta de Titular creada y sellada con DPAPI.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function toggleSidebar(open) {
+      document.getElementById('sidebar').classList.toggle('open', open);
+      document.getElementById('sidebar-overlay').classList.toggle('active', open);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Manager — UI-06 Ficha de Licencia y Equipo</title>
+  <style>
+    :root {
+      /* Paleta Kirito */
+      --azul-noche: #101828;
+      --azul-electrico: #2563eb;
+      --azul-electrico-hover: #1d4ed8;
+      --blanco-frio: #f8fafc;
+      --verde-activo: #16a34a;
+      --ambar-alerta: #d97706;
+      
+      --surface-card: #ffffff;
+      --border-subtle: #e2e8f0;
+      --border-sidebar: #1e293b;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --sidebar-width: 250px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--blanco-frio);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* Top switcher toolbar */
+    .top-toolbar {
+      position: fixed;
+      top: 14px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      border: 1px solid var(--border-subtle);
+      box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+      z-index: 200;
+      font-size: 11px;
+    }
+
+    .state-btn {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: var(--text-muted);
+      padding: 4px 12px;
+      border-radius: 9999px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .state-btn.active {
+      background: var(--azul-noche);
+      border-color: var(--azul-noche);
+      color: #ffffff;
+    }
+
+    /* Backdrop overlay */
+    .sidebar-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(16, 24, 40, 0.6);
+      backdrop-filter: blur(2px);
+      z-index: 140;
+    }
+
+    /* Sidebar Navigation — Azul noche #101828 */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--azul-noche);
+      border-right: 1px solid var(--border-sidebar);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 150;
+      color: #ffffff;
+    }
+
+    .brand {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--border-sidebar);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-sub {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+    }
+
+    .close-sidebar-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .nav-list {
+      list-style: none;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex-grow: 1;
+      overflow-y: auto;
+    }
+
+    .nav-item a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #cbd5e1;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .nav-item a:hover {
+      background: #1e293b;
+      color: #ffffff;
+    }
+
+    .nav-item.active a {
+      background: var(--azul-electrico);
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .nav-item.titular-only {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+      padding-top: 8px;
+      margin-top: 8px;
+    }
+
+    .tag-role {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(217, 119, 6, 0.25);
+      color: #fbbf24;
+      font-weight: 700;
+      margin-left: auto;
+    }
+
+    .user-profile {
+      padding: 16px;
+      border-top: 1px solid var(--border-sidebar);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 12px;
+      color: #38bdf8;
+    }
+
+    .user-info {
+      flex-grow: 1;
+      overflow: hidden;
+    }
+
+    .user-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ffffff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-role-text {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    /* Main Content */
+    .main-content {
+      flex-grow: 1;
+      padding: 32px 40px;
+      overflow-y: auto;
+      max-width: 1200px;
+    }
+
+    .mobile-header-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .hamburger-btn {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .breadcrumb a {
+      color: var(--azul-electrico);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    /* Header Bar */
+    .detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 24px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .biz-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #eff6ff;
+      border: 1px solid #dbeafe;
+      color: var(--azul-electrico);
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--azul-noche);
+      letter-spacing: -0.02em;
+    }
+
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-action {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-main);
+      padding: 9px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+
+    .btn-action:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+
+    .btn-action.primary {
+      background: var(--azul-electrico);
+      border-color: var(--azul-electrico);
+      color: #ffffff;
+    }
+
+    .btn-action.primary:hover {
+      background: var(--azul-electrico-hover);
+    }
+
+    /* Layout Grid */
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+      margin-bottom: 28px;
+    }
+
+    .card {
+      background: var(--surface-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
+    }
+
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Key Value Pairs */
+    .kv-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px 20px;
+    }
+
+    .kv-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .kv-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .kv-value {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--azul-noche);
+    }
+
+    .mono-code-box {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      color: var(--azul-electrico);
+      background: #eff6ff;
+      border: 1px solid #dbeafe;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      display: inline-block;
+      letter-spacing: 0.05em;
+    }
+
+    /* Status Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      width: fit-content;
+    }
+
+    .badge-active {
+      background: #dcfce7;
+      color: var(--verde-activo);
+    }
+
+    .badge-annulled {
+      background: #fee2e2;
+      color: #dc2626;
+    }
+
+    .badge-paid {
+      background: #dcfce7;
+      color: var(--verde-activo);
+    }
+
+    /* License String Display */
+    .license-banner {
+      background: #f8fafc;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 14px;
+      margin-top: 18px;
+    }
+
+    .license-string {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      word-break: break-all;
+      color: var(--azul-noche);
+      line-height: 1.5;
+      margin-bottom: 12px;
+      background: #ffffff;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+    }
+
+    /* Timeline Audit Trail */
+    .timeline {
+      position: relative;
+      padding-left: 24px;
+      margin-top: 14px;
+    }
+
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 6px;
+      bottom: 6px;
+      width: 2px;
+      background: #e2e8f0;
+    }
+
+    .timeline-item {
+      position: relative;
+      margin-bottom: 20px;
+    }
+
+    .timeline-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .timeline-dot {
+      position: absolute;
+      left: -24px;
+      top: 4px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 2px solid var(--azul-electrico);
+    }
+
+    .timeline-dot.success {
+      border-color: var(--verde-activo);
+    }
+
+    .timeline-dot.warning {
+      border-color: var(--ambar-alerta);
+    }
+
+    .timeline-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--azul-noche);
+      margin-bottom: 2px;
+    }
+
+    .timeline-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .timeline-desc {
+      font-size: 12px;
+      color: var(--text-main);
+      background: #f8fafc;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid #f1f5f9;
+    }
+
+    /* Clarification Note */
+    .notice-box {
+      background: #eff6ff;
+      border: 1px solid #dbeafe;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #1e40af;
+      line-height: 1.4;
+      margin-top: 20px;
+      display: flex;
+      gap: 10px;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .detail-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .sidebar-overlay.active {
+        display: block;
+      }
+      .close-sidebar-btn {
+        display: block;
+      }
+      .mobile-header-bar {
+        display: flex;
+      }
+      .main-content {
+        padding: 16px;
+      }
+      .kv-grid {
+        grid-template-columns: 1fr;
+      }
+      .detail-header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .header-actions {
+        width: 100%;
+        flex-direction: column;
+      }
+      .btn-action {
+        width: 100%;
+        justify-content: center;
+      }
+      .top-toolbar {
+        top: auto;
+        bottom: 12px;
+        right: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar-overlay" id="sidebar-overlay" onclick="toggleSidebar(false)"></div>
+
+  <!-- State switch widget for quick review -->
+  <div class="top-toolbar">
+    <span style="color: var(--text-muted);">Estado:</span>
+    <button class="state-btn active" id="btn-state-active" onclick="setRecordState('active')">Activa (Venta)</button>
+    <button class="state-btn" id="btn-state-annulled" onclick="setRecordState('annulled')">Anulada (Nota)</button>
+  </div>
+
+  <!-- Sidebar Kirito -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div>
+        <div class="brand-title">
+          <span style="color: var(--azul-electrico);">◆</span> FRUBBER
+        </div>
+        <div class="brand-sub">License Manager · Intranet</div>
+      </div>
+      <button class="close-sidebar-btn" onclick="toggleSidebar(false)">✕</button>
+    </div>
+
+    <ul class="nav-list">
+      <li class="nav-item">
+        <a href="#panel">
+          <span>📊</span> Resumen / Panel
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#clientes">
+          <span>🏢</span> Verdulerías / Clientes
+        </a>
+      </li>
+      <li class="nav-item active">
+        <a href="#licencias">
+          <span>🔑</span> Equipos y Licencias
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#ingresos">
+          <span>💵</span> Ingresos manuales
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#historial">
+          <span>🕒</span> Historial de cambios
+        </a>
+      </li>
+      <li class="nav-item titular-only">
+        <a href="#administradores">
+          <span>👥</span> Administradores
+          <span class="tag-role">Titular</span>
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#configuracion">
+          <span>⚙</span> Configuración
+        </a>
+      </li>
+      <li class="nav-item">
+        <a href="#respaldo">
+          <span>🛡</span> Respaldo
+        </a>
+      </li>
+    </ul>
+
+    <div class="user-profile">
+      <div class="user-avatar">DR</div>
+      <div class="user-info">
+        <div class="user-name">Daniel Rivera</div>
+        <div class="user-role-text">Titular de la cuenta</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div class="mobile-header-bar">
+      <button class="hamburger-btn" onclick="toggleSidebar(true)">☰ Menú</button>
+      <div style="font-size: 13px; font-weight: 700; color: var(--azul-noche);">FRUBBER · License Manager</div>
+    </div>
+
+    <div class="breadcrumb">
+      <a href="#licencias">Equipos y licencias</a>
+      <span>›</span>
+      <span>Ficha de licencia LIC-2026-0033</span>
+    </div>
+
+    <div class="detail-header">
+      <div>
+        <div class="biz-badge">🥬 Verdulería Registrada</div>
+        <h1 class="page-title" id="ui-biz-title">Verdulería La Huerta Central</h1>
+        <p class="page-subtitle">ID de Licencia: <strong>LIC-2026-0033</strong> · Clave criptográfica ID: <code>k2026a</code></p>
+      </div>
+
+      <div class="header-actions">
+        <button class="btn-action" onclick="copyLicenseString()">
+          <span>📋</span> Copiar licencia
+        </button>
+        <button class="btn-action primary" onclick="alert('Abriendo modal para registrar o editar cobro...')">
+          <span>💵</span> Gestionar cobro
+        </button>
+      </div>
+    </div>
+
+    <!-- Grid Layout -->
+    <div class="detail-grid">
+      
+      <!-- Columna Izquierda: Datos del Activo y Entrega -->
+      <div>
+        <!-- Tarjeta de Especificaciones de Licencia -->
+        <div class="card" style="margin-bottom: 20px;">
+          <h2 class="card-title">
+            <span>🔑</span> Especificaciones de la Licencia y Equipo
+          </h2>
+
+          <div class="kv-grid">
+            <div class="kv-item">
+              <span class="kv-label">Estado administrativo</span>
+              <span class="badge badge-active" id="badge-status">
+                ● Licencia Activa / Emitida
+              </span>
+            </div>
+
+            <div class="kv-item">
+              <span class="kv-label">Vigencia</span>
+              <span class="kv-value" style="color: var(--verde-activo);">Vitalicia (POS Offline)</span>
+            </div>
+
+            <div class="kv-item">
+              <span class="kv-label">Código de equipo (PC Verdulería)</span>
+              <div>
+                <span class="mono-code-box">A4B9-C102-E8F3-7B1A</span>
+              </div>
+            </div>
+
+            <div class="kv-item">
+              <span class="kv-label">Fecha de emisión</span>
+              <span class="kv-value">15 de octubre de 2026 — 10:24 AM</span>
+            </div>
+
+            <div class="kv-item">
+              <span class="kv-label">Administrador emisor</span>
+              <span class="kv-value">Daniel Rivera (Titular)</span>
+            </div>
+
+            <div class="kv-item">
+              <span class="kv-label">Algoritmo de firma</span>
+              <span class="kv-value">ECDSA P-256 / SHA-256 (DPAPI)</span>
+            </div>
+          </div>
+
+          <!-- Bloque de texto para copia de la licencia -->
+          <div class="license-banner">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+                Texto de licencia generado (FRB1)
+              </span>
+              <button style="background:none; border:none; color: var(--azul-electrico); font-size: 11px; font-weight: 700; cursor: pointer;" onclick="copyLicenseString()">
+                Copiar texto
+              </button>
+            </div>
+            <div class="license-string" id="license-string-text">
+              FRB1|k2026a|A4B9C102E8F37B1A|2026-10-15.MEQCIF5j9xQxLq83vZp219x8K1A49B88019Fbc76AA23AiA90Bfe8923a10984cca901239aafe098231c9a109
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted);">
+              Este texto se introduce una sola vez en el TPV del cliente. Frubber POS lo valida localmente sin requerir internet ni conexión al servidor.
+            </div>
+          </div>
+
+          <!-- Nota de revocación offline -->
+          <div class="notice-box">
+            <span style="font-size: 16px;">ℹ</span>
+            <div>
+              <strong>Regla técnica confirmada:</strong> Al ser Frubber POS un sistema completamente offline y fail-closed, si esta licencia se marca como "Anulada" en este registro, el cambio es únicamente administrativo en la base de datos local del servidor. No revoca de forma remota una licencia que el TPV del cliente ya tenga activada y sellada con su propio DPAPI local.
+            </div>
+          </div>
+        </div>
+
+        <!-- Tarjeta de Ingreso / Estado Financiero -->
+        <div class="card">
+          <h2 class="card-title">
+            <span>💰</span> Registro Financiero Asociado (COP)
+          </h2>
+
+          <div class="kv-grid">
+            <div class="kv-item">
+              <span class="kv-label">Categoría de operación</span>
+              <span class="kv-value">Venta estándar (Comercial)</span>
+            </div>
+
+            <div class="kv-item">
+              <span class="kv-label">Importe registrado</span>
+              <span class="kv-value" style="font-size: 15px; color: var(--azul-noche);">$ 450.000 COP</span>
+            </div>
+
+            <div class="kv-item">
+              <span class="kv-label">Estado de pago</span>
+              <span class="badge badge-paid">● Pagado</span>
+            </div>
+
+            <div class="kv-item">
+              <span class="kv-label">Método / Nota manual</span>
+              <span class="kv-value">Transferencia Bancaria · Confirmado</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Columna Derecha: Cliente e Historial de Auditoría -->
+      <div>
+        <!-- Datos de Contacto de la Verdulería -->
+        <div class="card" style="margin-bottom: 20px;">
+          <h2 class="card-title">
+            <span>🥬</span> Contacto del Negocio
+          </h2>
+
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div>
+              <span class="kv-label">Nombre del local</span>
+              <div class="kv-value" style="font-size: 14px;">La Huerta Central</div>
+            </div>
+            <div>
+              <span class="kv-label">Propietario / Responsable</span>
+              <div class="kv-value">Pedro Gómez</div>
+            </div>
+            <div>
+              <span class="kv-label">WhatsApp / Teléfono</span>
+              <div class="kv-value">+57 310 123 4567</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Línea temporal de auditoría -->
+        <div class="card">
+          <h2 class="card-title">
+            <span>🕒</span> Historial de Auditoría
+          </h2>
+
+          <div class="timeline">
+            <!-- Evento 1 -->
+            <div class="timeline-item">
+              <div class="timeline-dot success"></div>
+              <div class="timeline-title">Licencia emitida</div>
+              <div class="timeline-meta">15/10/2026 · 10:24 AM · Daniel Rivera</div>
+              <div class="timeline-desc">
+                Generada y firmada con llave ID <code>k2026a</code> para código <code>A4B9-C102-E8F3-7B1A</code>.
+              </div>
+            </div>
+
+            <!-- Evento 2 -->
+            <div class="timeline-item">
+              <div class="timeline-dot"></div>
+              <div class="timeline-title">Pago manual registrado</div>
+              <div class="timeline-meta">15/10/2026 · 10:26 AM · Daniel Rivera</div>
+              <div class="timeline-desc">
+                Cobro de $ 450.000 COP marcado como Pagado.
+              </div>
+            </div>
+
+            <!-- Evento 3 (Opcional en estado anulada) -->
+            <div class="timeline-item hidden" id="timeline-annulled-item">
+              <div class="timeline-dot warning"></div>
+              <div class="timeline-title">Marcada como Anulada</div>
+              <div class="timeline-meta">15/10/2026 · 11:00 AM · Daniel Rivera</div>
+              <div class="timeline-desc">
+                Registro administrativo actualizado a anulada por solicitud del titular.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    function toggleSidebar(open) {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      if (open) {
+        sidebar.classList.add('open');
+        overlay.classList.add('active');
+      } else {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('active');
+      }
+    }
+
+    function copyLicenseString() {
+      const text = document.getElementById('license-string-text').innerText.trim();
+      navigator.clipboard.writeText(text).then(() => {
+        alert('Texto de licencia FRB1 copiado al portapapeles.');
+      }).catch(() => {
+        alert('Copiado: ' + text);
+      });
+    }
+
+    function setRecordState(state) {
+      const btnActive = document.getElementById('btn-state-active');
+      const btnAnnulled = document.getElementById('btn-state-annulled');
+      const badgeStatus = document.getElementById('badge-status');
+      const timelineAnnulled = document.getElementById('timeline-annulled-item');
+
+      if (state === 'active') {
+        btnActive.classList.add('active');
+        btnAnnulled.classList.remove('active');
+        badgeStatus.className = 'badge badge-active';
+        badgeStatus.textContent = '● Licencia Activa / Emitida';
+        timelineAnnulled.classList.add('hidden');
+      } else {
+        btnAnnulled.classList.add('active');
+        btnActive.classList.remove('active');
+        badgeStatus.className = 'badge badge-annulled';
+        badgeStatus.textContent = '● Licencia Anulada (Registro)';
+        timelineAnnulled.classList.remove('hidden');
+      }
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+# --- Entorno -----------------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- Secrets: NUNCA subir estos archivos --------------------------------------
+# Cualquier llave privada, entorno o base de datos con datos del negocio.
+.env
+*.pem
+*.key
+*.p12
+*.pfx
+!backend/.env.example
+
+# --- Datos locales -----------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+backend/dev.db
+backend/repro.db
+
+# --- Arnés de interoperabilidad C# -------------------------------------------
+backend/tests/interop/**/bin/
+backend/tests/interop/**/obj/
+
+# --- Sistema -----------------------------------------------------------------
+.DS_Store
+Thumbs.db

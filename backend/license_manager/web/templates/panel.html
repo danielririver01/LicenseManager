@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block titulo %}Panel · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+  <h1 class="titulo">Hola, {{ current_user.nombre_completo.split(' ')[0] }}</h1>
+  <p class="subtitulo">Resumen general del registro de equipos y licencias.</p>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="etiqueta">Equipos registrados</div>
+      <div class="valor">{{ total_equipos }}</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Licencias emitidas</div>
+      <div class="valor">{{ total_licencias }}</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Ingresos pagados (COP)</div>
+      <div class="valor">${{ "{:,}".format(ingresos_pagados_cop).replace(',', '.') }}</div>
+    </div>
+  </div>
+
+  <div class="tarjeta">
+    <h2>Estado del sistema</h2>
+    <p class="pista">
+      El servidor firma las licencias de forma local. Frubber POS las valida sin
+      conexion a internet.
+    </p>
+  </div>
+</div>
+{% endblock %}
