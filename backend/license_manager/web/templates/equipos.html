@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block titulo %}Equipos y Licencias · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  <div class="encabezado-pantalla">
+    <div>
+      <h1 class="titulo">Equipos y Licencias Registradas</h1>
+      <p class="subtitulo">
+        Inventario completo de computadores vinculados a licencias vitalicias FRB1.
+      </p>
+    </div>
+    <a class="btn btn-primario" href="#alta-equipo">+ Registrar equipo</a>
+  </div>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  <form class="barra-filtros" method="get" action="/equipos">
+    <input type="search" name="q" value="{{ busqueda }}"
+           placeholder="Buscar por codigo de equipo (16 hex), con o sin guiones, o por verduleria..."
+           aria-label="Buscar equipo">
+    <span class="cuenta-filas">{{ total }} equipo{{ 's' if total != 1 else '' }} en el inventario</span>
+  </form>
+
+  <div class="tabla-envoltura">
+    <div class="tabla-scroll">
+      <table class="tabla-operadores">
+        <thead>
+          <tr>
+            <th>Codigo Hardware (16 Hex)</th>
+            <th>Verduleria / Negocio</th>
+            <th>ID Licencia</th>
+            <th>Tipo</th>
+            <th>Firma Servidor</th>
+            <th>Fecha de Emision</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for e in equipos %}
+          <tr>
+            <td><span class="codigo-hardware">{{ e.hardware_code_formateado }}</span></td>
+            <td>
+              {% if e.cliente_nombre %}<strong>{{ e.cliente_nombre }}</strong>
+              {% else %}<span class="notilla">Sin verduleria asignada</span>{% endif %}
+            </td>
+            <td>
+              {% if e.licencia_id %}<code class="id-corto">{{ e.licencia_id[:8] }}</code>
+              {% else %}<span class="notilla">Sin licencia</span>{% endif %}
+            </td>
+            <td>
+              {% if e.licencia_tipo %}
+                {% if e.licencia_tipo == 'comercial' %}<span class="badge badge-verde">Venta</span>
+                {% elif e.licencia_tipo == 'prueba' %}<span class="badge badge-azul">Prueba</span>
+                {% elif e.licencia_tipo == 'reemplazo' %}<span class="badge badge-azul">Reemplazo</span>
+                {% else %}<span class="badge badge-gris">Cortesia</span>{% endif %}
+              {% else %}<span class="badge badge-gris">Pendiente</span>{% endif %}
+            </td>
+            <td>
+              {% if e.firma_presente %}<span class="badge badge-verde">ECDSA P-256</span>
+              {% else %}<span class="notilla">Aun sin emitir</span>{% endif %}
+            </td>
+            <td>
+              {% if e.emitida_at %}{{ e.emitida_at.strftime('%d/%m/%Y · %H:%M') }}
+              {% else %}<span class="notilla">—</span>{% endif %}
+            </td>
+            <td>
+              <a class="btn-fila" href="/equipos/{{ e.id }}">Abrir ficha</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" style="padding:36px;text-align:center;color:var(--text-muted)">
+              {% if busqueda %}
+              No hay equipos que coincidan con "{{ busqueda }}".
+              {% else %}
+              El inventario esta vacio. Registra el primer equipo con su
+              codigo de hardware de 16 caracteres.
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alta de equipo (UI-04) -->
+  <div class="tarjeta" id="alta-equipo" style="margin-top:20px">
+    <h2>Registrar equipo fisico</h2>
+    <form method="post" action="/equipos">
+      <div class="form-grid">
+        <div class="campo">
+          <label for="hardware_code">Codigo de hardware (16 hex) *</label>
+          <input type="text" id="hardware_code" name="hardware_code" required
+                 maxlength="23" placeholder="A4B9-C102-E8F3-7B1A"
+                 style="text-transform:uppercase;font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:0.05em">
+          <p class="pista">
+            Exactamente 16 caracteres hexadecimales. Puedes pegarlo con guiones
+            o pegados; se guarda normalizado y ese mismo texto es el que
+            Frubber POS va a verificar.
+          </p>
+        </div>
+        <div class="campo">
+          <label for="cliente_id">Verduleria del equipo</label>
+          <select id="cliente_id" name="cliente_id">
+            <option value="">— Sin asignar por ahora —</option>
+            {% for c in clientes %}
+            <option value="{{ c.id }}">{{ c.nombre }}</option>
+            {% endfor %}
+          </select>
+          <p class="pista">
+            Puedes dejarlo vacio y asignarlo despues desde la ficha del equipo.
+          </p>
+        </div>
+        <div class="campo">
+          <label for="notas">Notas internas</label>
+          <input type="text" id="notas" name="notas" maxlength="200"
+                 placeholder="Ej. Balanza caja 2, tecnico que la instalo, etc.">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primario">Registrar equipo</button>
+    </form>
+  </div>
+
+  {% if not clientes %}
+  <div class="aviso-reglas" style="margin-top:20px">
+    <strong>Todavia no hay verdulerias registradas.</strong>
+    Puedes dar de alta el equipo sin asignarlo y vincularlo despues, o ir
+    primero al <a href="/clientes">directorio de clientes</a>.
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

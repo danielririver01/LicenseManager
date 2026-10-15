@@ -28,8 +28,8 @@
   <nav class="nav">
     <ul>
       <li><a href="/" class="{{ 'activo' if seccion == 'panel' else '' }}">Panel</a></li>
-      <li><a href="#" class="{{ 'activo' if seccion == 'clientes' else '' }}">Clientes</a></li>
-      <li><a href="#" class="{{ 'activo' if seccion == 'equipos' else '' }}">Equipos y licencias</a></li>
+      <li><a href="/clientes" class="{{ 'activo' if seccion == 'clientes' else '' }}">Clientes</a></li>
+      <li><a href="/equipos" class="{{ 'activo' if seccion == 'equipos' else '' }}">Equipos y licencias</a></li>
       <li><a href="#" class="{{ 'activo' if seccion == 'ingresos' else '' }}">Ingresos</a></li>
       <li><a href="#" class="{{ 'activo' if seccion == 'historial' else '' }}">Historial</a></li>
       {% if current_user.rol in ('owner', 'coowner') %}
@@ -42,5 +42,9 @@
   {% block cuerpo %}{% endblock %}
 
   <footer class="pie">{{ app_name }} · Servidor privado · Todas las acciones quedan registradas</footer>
+
+  {# CSP `script-src 'self'`: los pocos comportamientos interactivos (copiar
+     la licencia) viven en este archivo externo, nunca como script inline. #}
+  <script src="/static/lm.js" defer></script>
 </body>
 </html>

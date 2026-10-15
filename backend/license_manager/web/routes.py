@@ -28,7 +28,7 @@ from license_manager.deps import (
     require_titular,
     state,
 )
-from license_manager.models import Equipment, Income, License, Role, User
+from license_manager.models import Customer, Equipment, Income, License, Role, User
 from license_manager.security.passwords import (
     PasswordTooWeak,
     hash_password,
@@ -37,6 +37,18 @@ from license_manager.security.passwords import (
 )
 from license_manager.security.sessions import SessionManager
 from license_manager.services.audit import record_event
+from license_manager.services.directory import (
+    DirectoryError,
+    create_customer,
+    create_equipment,
+    format_cop,
+    format_hardware_code,
+    link_equipment_to_customer,
+    list_customers,
+    list_equipment,
+    load_equipment_file,
+    set_customer_active,
+)
 from license_manager.services.users import (
     UserManagementError,
     change_own_password,
@@ -509,3 +521,277 @@ def cambiar_mi_clave(
     _clear_session_cookie(response)
     _set_session_cookie(response, nueva_cookie)
     return response
+
+
+# --------------------------------------------------------------------------- #
+# Directorio de clientes e inventario de equipos (UI-03 / UI-04 / JHO-100)
+# --------------------------------------------------------------------------- #
+#
+# A diferencia de /administradores (UI-09), estas pantallas estan disponibles
+# para los tres roles: el documento 04 v2.0 dice que el Administrador Delegado
+# "registra clientes y emite licencias". Lo que NO puede es gestionar cuentas.
+
+
+def _sesion_o_login(request: Request, db: Session):
+    """Devuelve (usuario, None) o (None, redirect a /login)."""
+    user = get_current_user(request, db)
+    request.state.user = user
+    if user is None:
+        return None, RedirectResponse("/login", status_code=303)
+    return user, None
+
+
+def _volver(destino: str, aviso: str | None = None, error: str | None = None) -> RedirectResponse:
+    params: list[str] = []
+    if aviso:
+        params.append(f"aviso={quote(aviso)}")
+    if error:
+        params.append(f"error={quote(error)}")
+    sufijo = ("?" + "&".join(params)) if params else ""
+    return RedirectResponse(f"{destino}{sufijo}", status_code=303)
+
+
+@pages_router.get("/clientes", response_class=HTMLResponse)
+def clientes_page(request: Request, db: Session = Depends(get_db_session), q: str = ""):
+    """UI-03 · listado de verdulerias con buscador y estado comercial."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    clientes = list_customers(db, busqueda=q)
+    return _render(
+        request,
+        "clientes.html",
+        {
+            "seccion": "clientes",
+            "clientes": clientes,
+            "busqueda": q.strip(),
+            "total": len(clientes),
+            "aviso": request.query_params.get("aviso"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@pages_router.post("/clientes")
+def crear_cliente(
+    request: Request,
+    nombre: str = Form(""),
+    propietario: str = Form(""),
+    telefono: str = Form(""),
+    direccion: str = Form(""),
+    ciudad: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-03 · alta de verduleria."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    try:
+        customer = create_customer(
+            db,
+            actor_id=user.id,
+            nombre=nombre,
+            propietario=propietario,
+            telefono=telefono,
+            direccion=direccion,
+            ciudad=ciudad,
+        )
+    except DirectoryError as exc:
+        db.rollback()
+        return _volver("/clientes", error=str(exc))
+
+    record_event(
+        db,
+        action="cliente.creado",
+        user=user,
+        entity_type="verduleria",
+        entity_id=customer.id,
+        detail={"nombre": customer.nombre, "ciudad": customer.ciudad},
+    )
+    db.commit()
+    return _volver("/clientes", aviso=f"Verduleria {customer.nombre} registrada.")
+
+
+@pages_router.post("/clientes/{customer_id}/alternar")
+def alternar_cliente(
+    request: Request,
+    customer_id: str,
+    activo: str = Form(...),
+    db: Session = Depends(get_db_session),
+):
+    """UI-03 · activar/desactivar sin borrar historial."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    customer = db.get(Customer, customer_id)
+    if customer is None:
+        return _volver("/clientes", error="La verduleria solicitada no existe.")
+
+    deseado = activo in ("1", "true", "True", "on")
+    set_customer_active(db, customer=customer, active=deseado)
+    record_event(
+        db,
+        action="cliente.activado" if deseado else "cliente.desactivado",
+        user=user,
+        entity_type="verduleria",
+        entity_id=customer.id,
+        detail={"nombre": customer.nombre},
+    )
+    db.commit()
+
+    if deseado:
+        return _volver("/clientes", aviso=f"{customer.nombre} vuelve a estar activa.")
+    return _volver(
+        "/clientes",
+        aviso=(
+            f"{customer.nombre} desactivada. Sus equipos y licencias quedan "
+            f"conservados; ya no se pueden firmar licencias nuevas para ella."
+        ),
+    )
+
+
+@pages_router.get("/equipos", response_class=HTMLResponse)
+def equipos_page(request: Request, db: Session = Depends(get_db_session), q: str = ""):
+    """UI-04 · inventario de maquinas con su licencia vigente."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    equipos = list_equipment(db, busqueda=q)
+    clientes_activos = [
+        c for c in list_customers(db) if c.activo
+    ]
+    return _render(
+        request,
+        "equipos.html",
+        {
+            "seccion": "equipos",
+            "equipos": equipos,
+            "clientes": clientes_activos,
+            "busqueda": q.strip(),
+            "total": len(equipos),
+            "format_hardware_code": format_hardware_code,
+            "aviso": request.query_params.get("aviso"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@pages_router.post("/equipos")
+def crear_equipo(
+    request: Request,
+    hardware_code: str = Form(""),
+    cliente_id: str = Form(""),
+    notas: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-04 · alta de equipo. El codigo se normaliza igual que al firmar."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    try:
+        equipo = create_equipment(
+            db,
+            actor_id=user.id,
+            hardware_code_raw=hardware_code,
+            cliente_id=cliente_id.strip() or None,
+            notas=notas,
+        )
+    except DirectoryError as exc:
+        db.rollback()
+        return _volver("/equipos", error=str(exc))
+
+    record_event(
+        db,
+        action="equipo.creado",
+        user=user,
+        entity_type="equipo",
+        entity_id=equipo.id,
+        # El codigo de hardware no es secreto: es la identidad publica de la
+        # maquina y aparece ademas dentro del propio texto FRB1.
+        detail={"hardware_code": equipo.hardware_code, "cliente_id": equipo.cliente_id},
+    )
+    db.commit()
+    return _volver(
+        f"/equipos/{equipo.id}",
+        aviso=f"Equipo {format_hardware_code(equipo.hardware_code)} registrado.",
+    )
+
+
+@pages_router.get("/equipos/{equipment_id}", response_class=HTMLResponse)
+def ficha_equipo_page(request: Request, equipment_id: str, db: Session = Depends(get_db_session)):
+    """UI-06 · ficha del equipo: licencia FRB1, estado COP y bitacora."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    ficha = load_equipment_file(db, equipment_id)
+    if ficha is None:
+        return _volver("/equipos", error="El equipo solicitado no existe.")
+
+    return _render(
+        request,
+        "ficha_equipo.html",
+        {
+            "seccion": "equipos",
+            "ficha": ficha,
+            "codigo_formateado": format_hardware_code(ficha.equipo.hardware_code),
+            "format_cop": format_cop,
+            "clientes": [c for c in list_customers(db) if c.activo],
+            "aviso": request.query_params.get("aviso"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@pages_router.post("/equipos/{equipment_id}/cliente")
+def vincular_equipo(
+    request: Request,
+    equipment_id: str,
+    cliente_id: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-06 · asignar o quitar la verduleria de un equipo."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    equipo = db.get(Equipment, equipment_id)
+    if equipo is None:
+        return _volver("/equipos", error="El equipo solicitado no existe.")
+
+    destino_id = cliente_id.strip() or None
+    try:
+        link_equipment_to_customer(db, equipo=equipo, cliente_id=destino_id)
+    except DirectoryError as exc:
+        db.rollback()
+        return _volver(f"/equipos/{equipment_id}", error=str(exc))
+
+    cliente = db.get(Customer, destino_id) if destino_id else None
+    record_event(
+        db,
+        action="equipo.vinculado" if cliente else "equipo.desvinculado",
+        user=user,
+        entity_type="equipo",
+        entity_id=equipo.id,
+        detail={
+            "hardware_code": equipo.hardware_code,
+            "cliente_id": destino_id,
+            "cliente_nombre": cliente.nombre if cliente else None,
+        },
+    )
+    db.commit()
+
+    if cliente:
+        return _volver(
+            f"/equipos/{equipment_id}",
+            aviso=f"Equipo asignado a {cliente.nombre}.",
+        )
+    return _volver(
+        f"/equipos/{equipment_id}",
+        aviso="Equipo sin verduleria asignada. Su historial se conserva completo.",
+    )

@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block titulo %}Ficha de equipo · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  <div class="migas">
+    <a href="/equipos">Equipos y licencias</a>
+    <span>&rsaquo;</span>
+    <span>Ficha {{ codigo_formateado }}</span>
+  </div>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  <div class="encabezado-pantalla">
+    <div>
+      {% if ficha.cliente %}
+      <span class="badge badge-azul" style="margin-bottom:6px">Verduleria registrada</span>
+      <h1 class="titulo">{{ ficha.cliente.nombre }}</h1>
+      <p class="subtitulo" style="margin-bottom:0">
+        {% if ficha.licencia %}
+          Licencia <strong>{{ ficha.licencia.id[:8] }}</strong> ·
+          Llave criptografica <code>{{ ficha.licencia.key_id }}</code>
+        {% else %}
+          Este equipo todavia no tiene licencia emitida.
+        {% endif %}
+      </p>
+      {% else %}
+      <span class="badge badge-gris" style="margin-bottom:6px">Sin verduleria asignada</span>
+      <h1 class="titulo">Equipo {{ codigo_formateado }}</h1>
+      <p class="subtitulo" style="margin-bottom:0">
+        Asignale un negocio desde la tarjeta de contacto para que su historial
+        quede consolidado.
+      </p>
+      {% endif %}
+    </div>
+    <div class="acciones-cabecera">
+      {% if ficha.licencia_text %}
+      <button type="button" class="btn btn-secundario" data-copiar="texto-licencia">
+        Copiar licencia
+      </button>
+      {% endif %}
+      <button type="button" class="btn btn-primario" disabled
+              title="Se habilita con el modulo de Ingresos y Cobros">
+        Gestionar cobro
+      </button>
+    </div>
+  </div>
+
+  {% if ficha.licencia_text %}
+  <div class="alerta" data-estado-copia role="status" aria-live="polite" style="display:none"></div>
+  {% endif %}
+
+  <div class="rejilla-ficha">
+
+    <div>
+      <!-- Especificaciones de la licencia y el equipo -->
+      <div class="tarjeta">
+        <h2>Especificaciones de la licencia y equipo</h2>
+
+        <div class="pares">
+          <div class="par">
+            <span class="par-etiqueta">Estado administrativo</span>
+            {% if ficha.licencia %}
+              {% if ficha.licencia.estado_registro == 'anulada' %}
+              <span class="badge badge-gris">Licencia anulada (registro)</span>
+              {% else %}
+              <span class="badge badge-verde">Licencia activa / emitida</span>
+              {% endif %}
+            {% else %}
+            <span class="badge badge-gris">Sin licencia emitida</span>
+            {% endif %}
+          </div>
+
+          <div class="par">
+            <span class="par-etiqueta">Vigencia</span>
+            <span class="par-valor" style="color:var(--verde-activo)">
+              {% if ficha.licencia %}Vitalicia (POS offline){% else %}Aun no aplicable{% endif %}
+            </span>
+          </div>
+
+          <div class="par">
+            <span class="par-etiqueta">Codigo de equipo (PC de la verduleria)</span>
+            <span class="codigo-hardware grande">{{ codigo_formateado }}</span>
+          </div>
+
+          <div class="par">
+            <span class="par-etiqueta">Fecha de emision</span>
+            <span class="par-valor">
+              {% if ficha.licencia %}
+                {{ ficha.licencia.emitida_fecha.strftime('%d/%m/%Y') }}
+              {% else %}—{% endif %}
+            </span>
+          </div>
+
+          <div class="par">
+            <span class="par-etiqueta">Administrador emisor</span>
+            <span class="par-valor">{{ ficha.ingresado_por or '—' }}</span>
+          </div>
+
+          <div class="par">
+            <span class="par-etiqueta">Algoritmo de firma</span>
+            <span class="par-valor">
+              {% if ficha.licencia %}ECDSA P-256 / SHA-256{% else %}Sin firma{% endif %}
+            </span>
+          </div>
+        </div>
+
+        {% if ficha.licencia_text %}
+        <div class="bloque-licencia">
+          <div class="bloque-licencia-cabecera">
+            <span class="bloque-licencia-titulo">Texto de licencia generado (FRB1)</span>
+            <button type="button" class="enlace-copiar" data-copiar="texto-licencia">
+              Copiar texto
+            </button>
+          </div>
+          <pre id="texto-licencia" class="texto-licencia">{{ ficha.licencia_text }}</pre>
+          <p class="bloque-licencia-pie">
+            Este texto se introduce una sola vez en el TPV del cliente. Frubber POS
+            lo valida localmente sin requerir internet ni conexion al servidor.
+          </p>
+        </div>
+        {% else %}
+        <div class="aviso-reglas" style="margin-top:18px">
+          <strong>Todavia no hay licencia para este equipo.</strong>
+          Cuando la emitas, el texto FRB1 aparecera aqui para copiarlo y
+          entregarlo al cliente.
+        </div>
+        {% endif %}
+
+        <div class="aviso-reglas" style="margin-top:18px">
+          <strong>Regla tecnica confirmada:</strong> al ser Frubber POS un sistema
+          completamente offline y fail-closed, marcar esta licencia como
+          &ldquo;Anulada&rdquo; aqui es un cambio administrativo de este registro. No revoca
+          de forma remota una licencia que el TPV del cliente ya tenga activada.
+        </div>
+      </div>
+
+      <!-- Registro financiero -->
+      <div class="tarjeta">
+        <h2>Registro financiero asociado (COP)</h2>
+
+        {% if ficha.ingresos %}
+          {% for ingreso in ficha.ingresos %}
+          <div class="pares" style="margin-bottom:{{ '18px' if not loop.last else '0' }};padding-bottom:{{ '18px' if not loop.last else '0' }};border-bottom:{{ '1px solid var(--border-subtle)' if not loop.last else 'none' }}">
+            <div class="par">
+              <span class="par-etiqueta">Categoria de operacion</span>
+              <span class="par-valor">{{ ingreso.categoria }}</span>
+            </div>
+            <div class="par">
+              <span class="par-etiqueta">Importe registrado</span>
+              <span class="par-valor" style="font-size:16px">{{ format_cop(ingreso.monto_cop) }}</span>
+            </div>
+            <div class="par">
+              <span class="par-etiqueta">Estado de pago</span>
+              {% if ingreso.estado_pago == 'pagado' %}
+              <span class="badge badge-verde">Pagado</span>
+              {% elif ingreso.estado_pago == 'parcial' %}
+              <span class="badge badge-ambar">Pago parcial</span>
+              {% elif ingreso.estado_pago == 'reembolsado' %}
+              <span class="badge badge-gris">Reembolsado</span>
+              {% else %}
+              <span class="badge badge-ambar">Pendiente</span>
+              {% endif %}
+            </div>
+            <div class="par">
+              <span class="par-etiqueta">Metodo / Nota manual</span>
+              <span class="par-valor">{{ ingreso.metodo_pago or 'Sin metodo registrado' }}</span>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+        <p style="color:var(--text-muted);font-size:13px">
+          Este equipo no tiene ingresos registrados todavia. El alta de cobros
+          vive en la pantalla de <strong>Ingresos y Cobros</strong>.
+        </p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+      <!-- Contacto del negocio -->
+      <div class="tarjeta">
+        <h2>Contacto del negocio</h2>
+
+        {% if ficha.cliente %}
+        <div class="pares" style="grid-template-columns:1fr">
+          <div class="par">
+            <span class="par-etiqueta">Nombre del local</span>
+            <span class="par-valor" style="font-size:15px">{{ ficha.cliente.nombre }}</span>
+          </div>
+          <div class="par">
+            <span class="par-etiqueta">Propietario / Responsable</span>
+            <span class="par-valor">{{ ficha.cliente.propietario or '—' }}</span>
+          </div>
+          <div class="par">
+            <span class="par-etiqueta">WhatsApp / Telefono</span>
+            <span class="par-valor">{{ ficha.cliente.telefono or '—' }}</span>
+          </div>
+          <div class="par">
+            <span class="par-etiqueta">Direccion</span>
+            <span class="par-valor">
+              {{ [ficha.cliente.direccion, ficha.cliente.ciudad] | select | join(' · ') or '—' }}
+            </span>
+          </div>
+          {% if not ficha.cliente.activo %}
+          <div class="par">
+            <span class="par-etiqueta">Estado del negocio</span>
+            <span class="badge badge-ambar">Desactivado</span>
+          </div>
+          {% endif %}
+        </div>
+        {% else %}
+        <p style="color:var(--text-muted);font-size:13px">
+          Este equipo todavía no pertenece a ninguna verduleria del directorio.
+        </p>
+        {% endif %}
+
+        <form method="post" action="/equipos/{{ ficha.equipo.id }}/cliente"
+              style="margin-top:18px;border-top:1px solid var(--border-subtle);padding-top:18px">
+          <div class="campo">
+            <label for="cliente_id">Asignar a otra verduleria</label>
+            <select id="cliente_id" name="cliente_id">
+              <option value="">— Sin verduleria asignada —</option>
+              {% for c in clientes %}
+              <option value="{{ c.id }}"
+                      {{ 'selected' if ficha.cliente and c.id == ficha.cliente.id else '' }}>
+                {{ c.nombre }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <button type="submit" class="btn btn-secundario"
+                  onclick="return confirm('Guardar el vinculo de este equipo con la verduleria elegida? El historial se conserva.')">
+            Guardar vinculo
+          </button>
+          <p class="pista">
+            Desasignar un equipo no borra nada: las licencias y los cobros
+            emitidos quedan en la bitacora.
+          </p>
+        </form>
+      </div>
+
+      <!-- Bitacora -->
+      <div class="tarjeta">
+        <h2>Historial de auditoria</h2>
+
+        <div class="linea-tiempo">
+          {% for ev in ficha.historial %}
+          <div class="evento">
+            <span class="punto {{ ev.tono }}"></span>
+            <div class="evento-titulo">{{ ev.titulo }}</div>
+            <div class="evento-meta">
+              {% if ev.cuando %}{{ ev.cuando.strftime('%d/%m/%Y · %H:%M') }}{% endif %}
+              {% if ev.quien %} · {{ ev.quien }}{% endif %}
+            </div>
+            <div class="evento-detalle">{{ ev.detalle }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

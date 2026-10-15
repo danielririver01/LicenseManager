@@ -182,3 +182,107 @@ p.subtitulo { color: var(--text-muted); margin-bottom: 28px; }
 
 /* El campo oculto del formulario propio no debe verse */
 .oculto { display: none; }
+
+/* --- Pantallas de directorio e inventario (UI-03 / UI-04 / JHO-100) ------ */
+.encabezado-pantalla {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 22px;
+}
+.encabezado-pantalla .titulo { margin-bottom: 4px; }
+.encabezado-pantalla .subtitulo { margin-bottom: 0; }
+
+.barra-filtros {
+  background: var(--surface-card); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius); padding: 14px 18px; margin-bottom: 18px;
+  display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+}
+.barra-filtros input[type="search"] {
+  flex: 1; min-width: 240px; background: #f8fafc; border: 1px solid var(--border-subtle);
+  padding: 10px 14px; border-radius: 10px; font-size: 13px; color: var(--text-main);
+}
+.barra-filtros input[type="search"]:focus {
+  outline: none; border-color: var(--azul-electrico); background: #fff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+.cuenta-filas { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+/* Codigo de hardware: monoespaciado y con guiones, igual que lo lee el tecnico */
+.codigo-hardware {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--azul-electrico); background: #eff6ff; border: 1px solid #dbeafe;
+  padding: 3px 8px; border-radius: 6px; font-weight: 700; font-size: 12px;
+  letter-spacing: 0.05em; white-space: nowrap; display: inline-block;
+}
+.codigo-hardware.grande { font-size: 15px; padding: 7px 12px; }
+.id-corto {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; color: var(--text-muted);
+}
+
+/* --- Ficha del equipo (UI-06 / JHO-100) --------------------------------- */
+.migas { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+.migas a { color: var(--azul-electrico); text-decoration: none; font-weight: 600; }
+.acciones-cabecera { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.rejilla-ficha { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; align-items: start; }
+
+.pares { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; }
+.par { display: flex; flex-direction: column; gap: 4px; }
+.par-etiqueta {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-muted); font-weight: 600;
+}
+.par-valor { font-size: 13px; font-weight: 600; color: var(--azul-noche); }
+
+.bloque-licencia {
+  background: #f8fafc; border: 1px solid var(--border-subtle);
+  border-radius: 10px; padding: 14px; margin-top: 18px;
+}
+.bloque-licencia-cabecera { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
+.bloque-licencia-titulo {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--text-muted);
+}
+.enlace-copiar {
+  background: none; border: none; color: var(--azul-electrico);
+  font-size: 11px; font-weight: 700; cursor: pointer; padding: 0;
+}
+.enlace-copiar:hover { text-decoration: underline; }
+.texto-licencia {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.5; word-break: break-all; white-space: pre-wrap;
+  color: var(--azul-noche); background: #fff; padding: 10px;
+  border: 1px solid var(--border-subtle); border-radius: 6px; margin: 0;
+}
+.bloque-licencia-pie { font-size: 11px; color: var(--text-muted); margin-top: 8px; }
+
+/* Linea temporal de auditoria */
+.linea-tiempo { position: relative; padding-left: 24px; margin-top: 4px; }
+.linea-tiempo::before {
+  content: ""; position: absolute; left: 7px; top: 8px; bottom: 8px;
+  width: 2px; background: var(--border-subtle);
+}
+.evento { position: relative; margin-bottom: 18px; }
+.evento:last-child { margin-bottom: 0; }
+.evento .punto {
+  position: absolute; left: -24px; top: 3px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; border: 2px solid var(--azul-electrico);
+}
+.evento .punto.exito { border-color: var(--verde-activo); }
+.evento .punto.aviso { border-color: var(--ambar-alerta); }
+.evento-titulo { font-size: 13px; font-weight: 700; color: var(--azul-noche); }
+.evento-meta { font-size: 11px; color: var(--text-muted); margin: 2px 0 4px; }
+.evento-detalle {
+  font-size: 12px; color: var(--text-main); background: #f8fafc;
+  padding: 6px 10px; border-radius: 6px; border: 1px solid #f1f5f9;
+}
+
+@media (max-width: 900px) {
+  .rejilla-ficha { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  .pares { grid-template-columns: 1fr; }
+  .encabezado-pantalla { flex-direction: column; align-items: stretch; }
+  .encabezado-pantalla .btn { width: 100%; text-align: center; }
+  .acciones-cabecera .btn { flex: 1; text-align: center; }
+}

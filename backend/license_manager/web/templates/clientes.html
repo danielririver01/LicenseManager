@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block titulo %}Verdulerias y Clientes · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  <div class="encabezado-pantalla">
+    <div>
+      <h1 class="titulo">Directorio de Verdulerias y Clientes</h1>
+      <p class="subtitulo">
+        Listado consolidado de negocios con Frubber POS, equipos activos y
+        estado comercial.
+      </p>
+    </div>
+    <a class="btn btn-primario" href="#alta-cliente">+ Registrar verduleria</a>
+  </div>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  <form class="barra-filtros" method="get" action="/clientes">
+    <input type="search" name="q" value="{{ busqueda }}"
+           placeholder="Buscar por nombre de verduleria, propietario o telefono..."
+           aria-label="Buscar verduleria">
+    <span class="cuenta-filas">{{ total }} verduleria{{ 's' if total != 1 else '' }} en el directorio</span>
+  </form>
+
+  <div class="tabla-envoltura">
+    <div class="tabla-scroll">
+      <table class="tabla-operadores">
+        <thead>
+          <tr>
+            <th>Verduleria / Negocio</th>
+            <th>Responsable</th>
+            <th>Contacto WhatsApp</th>
+            <th>Equipos Activos</th>
+            <th>Estado Comercial</th>
+            <th>Ultima Licencia</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in clientes %}
+          <tr>
+            <td>
+              <div class="fila-nombre">{{ c.nombre }}</div>
+              {% if c.ciudad or c.direccion %}
+              <div class="fila-sub">{{ [c.direccion, c.ciudad] | select | join(' · ') }}</div>
+              {% endif %}
+              {% if not c.activo %}<div class="fila-sub">Negocio desactivado</div>{% endif %}
+            </td>
+            <td>{{ c.propietario or '—' }}</td>
+            <td>{{ c.telefono or '—' }}</td>
+            <td><strong>{{ c.equipos_activos }}</strong></td>
+            <td>
+              <span class="badge badge-{{ c.estado_tono }}">{{ c.estado_comercial }}</span>
+            </td>
+            <td>
+              {% if c.ultima_licencia_at %}{{ c.ultima_licencia_at.strftime('%d/%m/%Y') }}
+              {% else %}<span class="notilla">Sin emision</span>{% endif %}
+            </td>
+            <td>
+              <a class="btn-fila" href="/equipos?q={{ c.nombre | urlencode }}">Ver equipos</a>
+              <form class="accion-form" method="post" action="/clientes/{{ c.id }}/alternar">
+                <input type="hidden" name="activo" value="{{ '0' if c.activo else '1' }}">
+                {% if c.activo %}
+                <button type="submit" class="btn-fila peligro"
+                        onclick="return confirm('Desactivar {{ c.nombre }}? Sus equipos y licencias se conservan, pero ya no se firmaran licencias nuevas para este negocio.')">
+                  Desactivar
+                </button>
+                {% else %}
+                <button type="submit" class="btn-fila activo"
+                        onclick="return confirm('Reactivar {{ c.nombre }}?')">
+                  Reactivar
+                </button>
+                {% endif %}
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" style="padding:36px;text-align:center;color:var(--text-muted)">
+              {% if busqueda %}
+              No hay verdulerias que coincidan con "{{ busqueda }}".
+              {% else %}
+              Todavia no hay verdulerias registradas. Empieza por el boton
+              <strong>+ Registrar verduleria</strong>.
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alta de verduleria (UI-03). Formulario visible en vez de modal:
+       el sitio se rinde en el servidor con CSP sin scripts inline. -->
+  <div class="tarjeta" id="alta-cliente" style="margin-top:20px">
+    <h2>Registrar nueva verduleria</h2>
+    <form method="post" action="/clientes">
+      <div class="form-grid">
+        <div class="campo">
+          <label for="nombre">Nombre del negocio / local *</label>
+          <input type="text" id="nombre" name="nombre" required maxlength="160"
+                 placeholder="Ej. Fruteria y Verduleria Los Sauces">
+        </div>
+        <div class="campo">
+          <label for="propietario">Nombre del propietario / responsable</label>
+          <input type="text" id="propietario" name="propietario" maxlength="160"
+                 placeholder="Ej. Hernan Morales">
+        </div>
+        <div class="campo">
+          <label for="telefono">Telefono / WhatsApp de contacto</label>
+          <input type="tel" id="telefono" name="telefono" maxlength="40"
+                 placeholder="+57 310 ...">
+        </div>
+        <div class="campo">
+          <label for="ciudad">Ciudad</label>
+          <input type="text" id="ciudad" name="ciudad" maxlength="120" placeholder="Ej. Medellin">
+        </div>
+        <div class="campo">
+          <label for="direccion">Direccion del local</label>
+          <input type="text" id="direccion" name="direccion" maxlength="200" placeholder="Calle 10 # 45-20">
+        </div>
+      </div>
+      <p class="pista" style="margin-bottom:14px">
+        Solo el nombre es obligatorio. El resto puedes completarlo despues
+        cuando tengas el dato en la mano.
+      </p>
+      <button type="submit" class="btn btn-primario">Guardar verduleria</button>
+    </form>
+  </div>
+
+</div>
+{% endblock %}
