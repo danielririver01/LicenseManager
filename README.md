@@ -96,11 +96,17 @@ por eso no está en ningún repositorio. Para cargarla:
 ```powershell
 # Genera un par nuevo (solo si se rota la llave; habría que actualizar el POS)
 .\.venv\Scripts\python.exe -m license_manager.tools.genkey
+
+# Comprueba que la llave del servidor es la que el POS verifica (huella pública)
+$env:LM_ECDSA_PRIVATE_KEY_FILE = "backend\llave-pos.pem"
+.\.venv\Scripts\python.exe -m license_manager.tools.verificar_llave --pos "C:\ruta\a\Frutter POS\src"
 ```
 
 > Si emites con una llave distinta de la que el POS trae embebida, el POS
-> **rechazará todas las licencias**. Verifica siempre contra el POS antes de
-> emitir en producción.
+> **rechazará todas las licencias**. El `keyId` coincidiría igual (es solo una
+> cadena), así que la única comprobación que vale es `verificar_llave`: compara
+> la huella de la llave pública. Verifica siempre contra el POS antes de emitir
+> en producción.
 
 ---
 
@@ -175,6 +181,7 @@ backend/
       mayorista.py      Paquetes prepago y saldo de cupos (UI-10)
     tools/
       genkey.py         Genera el par ECDSA
+      verificar_llave.py  Comprueba la llave contra Frubber POS (JHO-106)
       backup.py         Respaldo verificado con rotación (JHO-106)
     web/
       routes.py         Páginas y API

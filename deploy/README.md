@@ -72,18 +72,24 @@ Verifica que la llave es la que el POS reconoce **antes** de emitir en
 producción:
 
 ```bash
-sudo -u license-manager /opt/license-manager/.venv/bin/python - <<'PY'
-from license_manager.config import get_settings
-from license_manager.deps import load_signing_key_safely
-llave, error = load_signing_key_safely(get_settings())
-assert llave is not None, error
-print("keyId cargado:", llave.key_id)
-assert llave.key_id == get_settings().expected_key_id, "keyId distinto al del POS"
-print("OK: la llave corresponde al keyId que el POS trae embebido")
-PY
+sudo -u license-manager /opt/license-manager/.venv/bin/python \
+  -m license_manager.tools.verificar_llave --pos /opt/license-manager/Frutter-POS/src
 ```
 
-Si esa comprobación falla, **no emitas**: el POS rechazaría todas las licencias.
+Debe terminar en `OK: la llave del servidor es la que Frubber POS verifica.`
+
+> **Por qué esto no es opcional.** El `keyId` del texto de la licencia es solo
+> una cadena de configuración: si el servidor tiene otra llave privada, emite
+> licencias que se ven perfectas y que el POS **rechaza todas**, sin que nada
+> avise. Este chequeo compara la huella de la llave **pública** derivada de la
+> privada del servidor contra la constante `CurrentPublicKeyBase64` del POS, que
+> es lo único que zanja la duda. El comando sale con código 1 si no coinciden.
+
+Si el POS no está en el servidor, pásale la llave pública a mano:
+
+```bash
+python -m license_manager.tools.verificar_llave --esperada "<SPKI Base64 del POS>"
+```
 
 ---
 
