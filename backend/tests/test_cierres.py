@@ -365,6 +365,109 @@ def test_el_csv_es_reproducible_desde_el_servicio(client, db_session):
     assert "$" not in texto, "el CSV lleva enteros, no moneda formateada"
 
 
+# --------------------------------------------------------------------------- #
+# Estado del cobro vs. estado de la cuenta (aclaracion que pidio el Titular)
+# --------------------------------------------------------------------------- #
+
+
+def test_una_prueba_aparece_sin_cobro_y_con_su_reloj(client, db_session):
+    """Una prueba no esta "pagada": no hay nada que cobrar. Y su reloj corre."""
+    _entrada_titular(client, db_session)
+    cliente_id = _cliente(db_session)
+    create_equipment(
+        db_session, actor_id=None, hardware_code_raw=CODIGOS[0], cliente_id=cliente_id
+    )
+    db_session.commit()
+    client.post(
+        "/emitir",
+        data={
+            "cliente_id": cliente_id,
+            "codigo": CODIGOS[0],
+            "tipo": "prueba",
+            "importe": "0",
+        },
+        follow_redirects=False,
+    )
+
+    cierre = resumen_cierre(db_session, periodo=mes_actual())
+
+    movimiento = cierre.movimientos[0]
+    assert movimiento.categoria == "gratuito"
+    assert movimiento.monto_cop == 0
+    assert movimiento.estado_etiqueta == "Sin cobro"
+    assert movimiento.estado_tono == "gris"
+    # El cronometro de la licencia es otra columna, y es el que muestra UI-07.
+    assert movimiento.cuenta_etiqueta == "En periodo de prueba"
+
+    # La pantalla dice las dos cosas, sin contradecirse.
+    cuerpo = client.get("/cierres").text
+    assert "Sin cobro" in cuerpo
+    assert "Cuenta: En periodo de prueba" in cuerpo
+    assert "Estado del cobro" in cuerpo
+
+
+def test_una_venta_cobrada_sigue_pagada_y_sin_reloj(client, db_session):
+    _entrada_titular(client, db_session)
+    cliente_id = _cliente(db_session)
+    _ventas(db_session, client, cliente_id, 1)
+
+    cierre = resumen_cierre(db_session, periodo=mes_actual())
+
+    movimiento = cierre.movimientos[0]
+    assert movimiento.monto_cop == PRECIO_VENTA_COP
+    assert movimiento.estado_etiqueta == "Pagado"
+    assert movimiento.estado_tono == "verde"
+    # Una venta no tiene cronometro corriendo: no se inventa una fila "Cuenta:".
+    assert movimiento.cuenta_etiqueta is None
+
+
+def test_una_cuenta_vencida_muestra_su_reloj(client, db_session):
+    """El otro caso donde el reloj importa: la licencia quedo vencida."""
+    from datetime import timedelta
+
+    from license_manager.models import License
+
+    _entrada_titular(client, db_session)
+    cliente_id = _cliente(db_session)
+    _ventas(db_session, client, cliente_id, 1)
+    licencia = db_session.execute(select(License)).scalar_one()
+    licencia.estado_cobro = "vencida"
+    licencia.emitida_fecha = mes_actual() - timedelta(days=5)
+    db_session.commit()
+
+    cierre = resumen_cierre(db_session, periodo=mes_actual())
+    movimiento = next(
+        mov for mov in cierre.movimientos if mov.licencia_key is not None
+    )
+
+    assert movimiento.cuenta_etiqueta == "Cuenta Vencida"
+
+
+def test_el_csv_del_cierre_tambien_dice_sin_cobro(client, db_session):
+    _entrada_titular(client, db_session)
+    cliente_id = _cliente(db_session)
+    create_equipment(
+        db_session, actor_id=None, hardware_code_raw=CODIGOS[0], cliente_id=cliente_id
+    )
+    db_session.commit()
+    client.post(
+        "/emitir",
+        data={
+            "cliente_id": cliente_id,
+            "codigo": CODIGOS[0],
+            "tipo": "prueba",
+            "importe": "0",
+        },
+        follow_redirects=False,
+    )
+
+    cierre = resumen_cierre(db_session, periodo=mes_actual())
+    texto = exportar_cierre_csv(cierre)
+
+    assert "Sin cobro" in texto
+    assert "Pagado" not in texto
+
+
 def test_format_millones_y_variacion_son_enteros():
     assert format_millones(1_800_000) == "$1,8M"
     assert format_millones(450_000) == "$450k"

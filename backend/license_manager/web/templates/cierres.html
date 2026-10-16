@@ -101,7 +101,7 @@
               <th>Código equipo</th>
               <th>Categoría</th>
               <th>Importe (COP)</th>
-              <th>Estado</th>
+              <th>Estado del cobro</th>
               <th>Registró</th>
             </tr>
           </thead>
@@ -120,7 +120,12 @@
               </td>
               <td>{{ mov.categoria_etiqueta }}</td>
               <td><strong class="monto-cop">{{ format_cop(mov.monto_cop) }}</strong></td>
-              <td><span class="badge badge-{{ 'verde' if mov.estado_pago == 'pagado' else 'ambar' }}">{{ mov.estado_etiqueta }}</span></td>
+              <td>
+                <span class="badge badge-{{ mov.estado_tono }}">{{ mov.estado_etiqueta }}</span>
+                {% if mov.cuenta_etiqueta %}
+                <div class="fila-sub">Cuenta: {{ mov.cuenta_etiqueta }}</div>
+                {% endif %}
+              </td>
               <td>{{ mov.registrado_por }}</td>
             </tr>
             {% else %}

@@ -20,10 +20,20 @@ from datetime import date
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from license_manager.models import Customer, Equipment, Income, License, PaymentStatus, User
+from license_manager.models import (
+    ChargeStatus,
+    Customer,
+    Equipment,
+    Income,
+    License,
+    PaymentStatus,
+    User,
+)
 from license_manager.services.ingresos import (
     ETIQUETAS_CATEGORIA,
+    ETIQUETAS_CUENTA,
     ETIQUETAS_ESTADO,
+    TONOS_ESTADO,
     hoy_utc,
 )
 from license_manager.services.periodos import (
@@ -87,6 +97,11 @@ class MovimientoCierre:
     monto_cop: int
     estado_pago: str
     estado_etiqueta: str
+    # Estado del cronometro de la licencia, cuando lo tiene corriendo. Es otra
+    # cosa que el estado del cobro: una prueba esta "sin cobro" (nada que
+    # cobrar) y a la vez "en periodo de prueba" (el reloj de 30 dias anda).
+    estado_tono: str
+    cuenta_etiqueta: str | None
     registrado_por: str
     nota: str | None
 
@@ -267,6 +282,30 @@ _PRUEBA_DETALLE = (
     ("pagado", "pagada"),
 )
 
+# Estados del cronometro que vale la pena mostrar en el detalle: son los unicos
+# en los que la cuenta sigue "corriendo". ``pagado`` y ``no_aplica`` no aportan
+# nada al lado del estado del cobro.
+_CUENTAS_VISIBLES = (
+    ChargeStatus.TRIAL_ACTIVE.value,
+    ChargeStatus.PAYMENT_PENDING.value,
+    ChargeStatus.OVERDUE.value,
+)
+
+
+def _estado_del_movimiento(ingreso: Income) -> tuple[str, str]:
+    """(etiqueta, tono) del movimiento de DINERO, no del cronometro.
+
+    Un movimiento de $ 0 (prueba, cortesia, reemplazo) no esta "pagado": no hay
+    nada que cobrar. Decirlo asi evita que choque con el estado de la cuenta de
+    la licencia, que es una columna distinta y con su propio reloj.
+    """
+    if int(ingreso.monto_cop) == 0:
+        return "Sin cobro", "gris"
+    return (
+        ETIQUETAS_ESTADO.get(ingreso.estado_pago, ingreso.estado_pago),
+        TONOS_ESTADO.get(ingreso.estado_pago, "gris"),
+    )
+
 
 def _pruebas_del_mes(db: Session, periodo: date) -> tuple[int, str]:
     """Pruebas iniciadas en el mes y en que punto del ciclo quedaron."""
@@ -304,6 +343,10 @@ def _movimientos_del_mes(db: Session, periodo: date) -> list[MovimientoCierre]:
 
     movimientos: list[MovimientoCierre] = []
     for ingreso, licencia, equipo, cliente_nombre, registrado in db.execute(query).all():
+        etiqueta, tono = _estado_del_movimiento(ingreso)
+        cuenta = None
+        if licencia is not None and licencia.estado_cobro in _CUENTAS_VISIBLES:
+            cuenta = ETIQUETAS_CUENTA.get(licencia.estado_cobro, licencia.estado_cobro)
         movimientos.append(
             MovimientoCierre(
                 fecha=ingreso.periodo,
@@ -316,9 +359,9 @@ def _movimientos_del_mes(db: Session, periodo: date) -> list[MovimientoCierre]:
                 ),
                 monto_cop=int(ingreso.monto_cop),
                 estado_pago=ingreso.estado_pago,
-                estado_etiqueta=ETIQUETAS_ESTADO.get(
-                    ingreso.estado_pago, ingreso.estado_pago
-                ),
+                estado_etiqueta=etiqueta,
+                estado_tono=tono,
+                cuenta_etiqueta=cuenta,
                 registrado_por=registrado or "Sistema",
                 nota=ingreso.nota,
             )
