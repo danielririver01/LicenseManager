@@ -12,6 +12,7 @@ publica, que de por si es publica.
 
 from __future__ import annotations
 
+from datetime import UTC
 from pathlib import Path
 from urllib.parse import quote
 
@@ -28,7 +29,7 @@ from license_manager.deps import (
     require_titular,
     state,
 )
-from license_manager.models import Customer, Equipment, Income, License, Role, User
+from license_manager.models import Customer, Equipment, Income, License, Role, User, utcnow
 from license_manager.security.passwords import (
     PasswordTooWeak,
     hash_password,
@@ -50,6 +51,7 @@ from license_manager.services.directory import (
     set_customer_active,
 )
 from license_manager.services.licencias import (
+    MOTIVO_INVALIDO,
     MOTIVO_VIGENTE,
     PRECIO_VENTA_COP,
     TIPOS_EMISION,
@@ -823,8 +825,14 @@ def vincular_equipo(
 # la llave.
 
 
-def _equipo_elegido(db: Session, equipo_id: str) -> Equipment | None:
-    return db.get(Equipment, equipo_id) if equipo_id else None
+def _cliente_o_error(db: Session, cliente_id: str) -> Customer | None:
+    """Cliente elegido en UI-05. None si no existe o esta desactivado."""
+    if not cliente_id:
+        return None
+    cliente = db.get(Customer, cliente_id)
+    if cliente is None:
+        return None
+    return cliente if cliente.activo else None
 
 
 @pages_router.get("/emitir", response_class=HTMLResponse)
@@ -832,9 +840,17 @@ def emitir_page(
     request: Request,
     db: Session = Depends(get_db_session),
     equipo: str = "",
+    codigo: str = "",
+    cliente: str = "",
     licencia: str = "",
 ):
-    """UI-05 · formulario de emision. Arranca siempre con campos limpios."""
+    """UI-05 · formulario de emision (doc 02, seccion 5.2).
+
+    Arranca siempre limpio. Los parametros existen para las entradas reales del
+    flujo: ``equipo`` viene de la ficha UI-06 («Emitir licencia para este
+    equipo») y ``codigo``/``cliente`` conservan lo que se escribio cuando un
+    rechazo devuelve el formulario.
+    """
     user, denied = _sesion_o_login(request, db)
     if denied:
         return denied
@@ -845,25 +861,46 @@ def emitir_page(
         if resultado is None:
             return _volver("/emitir", error="La licencia indicada no existe.")
 
-    equipo_previo = _equipo_elegido(db, equipo)
+    equipo_previo = db.get(Equipment, equipo) if equipo else None
     if equipo and equipo_previo is None:
         return _volver("/emitir", error="El equipo indicado no existe.")
 
+    cliente_previo = _cliente_o_error(db, cliente)
+    if cliente and cliente_previo is None:
+        return _volver("/emitir", error="La verduleria indicada no existe o esta desactivada.")
+
+    # La ficha trae el codigo ya registrado y, si lo tiene, su verduleria.
+    codigo_sugerido = codigo
+    if equipo_previo is not None:
+        codigo_sugerido = format_hardware_code(equipo_previo.hardware_code)
+        if cliente_previo is None and equipo_previo.cliente_id:
+            cliente_previo = db.get(Customer, equipo_previo.cliente_id)
+
+    error = request.query_params.get("error")
+    diagnostico = diagnosticar_codigo(db, codigo_sugerido) if codigo_sugerido else None
+    if diagnostico is not None and diagnostico.motivo == MOTIVO_INVALIDO and not error:
+        # Un codigo ilegible no se descarta en silencio: se explica al operador.
+        error = diagnostico.texto
+
+    hoy = utcnow().astimezone(UTC).date()
     return _render(
         request,
         "emitir.html",
         {
             "seccion": "equipos",
             "tipos": TIPOS_EMISION,
-            "equipos": listar_equipos_disponibles(db),
-            "equipo_previo": equipo_previo,
+            "clientes": listar_clientes_activos(db),
+            "cliente_previo": cliente_previo,
+            "codigo_sugerido": codigo_sugerido,
+            "diagnostico": diagnostico,
             "resultado": resultado,
             "precio_venta": PRECIO_VENTA_COP,
+            "hoy": hoy.strftime("%d/%m/%Y"),
             "format_cop": format_cop,
             "format_hardware_code": format_hardware_code,
             "firma_disponible": state.signing_key is not None,
             "aviso": request.query_params.get("aviso"),
-            "error": request.query_params.get("error"),
+            "error": error,
         },
     )
 
@@ -871,26 +908,26 @@ def emitir_page(
 @pages_router.post("/emitir")
 def emitir_submit(
     request: Request,
-    equipo_id: str = Form(""),
+    cliente_id: str = Form(""),
+    codigo: str = Form(""),
     tipo: str = Form(""),
     importe: str = Form(""),
     db: Session = Depends(get_db_session),
 ):
-    """UI-05 · firma la licencia y registra el ingreso de la emision."""
+    """UI-05 · valida el codigo pegado, firma y registra el ingreso."""
     user, denied = _sesion_o_login(request, db)
     if denied:
         return denied
 
-    equipo = _equipo_elegido(db, equipo_id)
-    if equipo is None:
-        return _volver("/emitir", error="Selecciona el equipo al que corresponde la licencia.")
+    # Todo rechazo devuelve el formulario con lo que se habia escrito.
+    destino = f"/emitir?cliente={quote(cliente_id, safe='')}&codigo={quote(codigo, safe='')}"
 
     if tipo_emision_por(tipo) is None:
-        return _volver(f"/emitir?equipo={equipo.id}", error="Elige un tipo de licencia valido.")
+        return _volver(destino, error="Elige un tipo de licencia valido.")
 
     if state.signing_key is None:
         return _volver(
-            f"/emitir?equipo={equipo.id}",
+            destino,
             error=(
                 "La llave de firma no esta disponible en el servidor. "
                 "No es posible emitir licencias hasta configurarla."
@@ -898,9 +935,24 @@ def emitir_submit(
         )
 
     try:
-        importe_cop = None if tipo_emision_por(tipo).es_pagable else 0
-        if importe_cop is None:
-            importe_cop = parse_importe_cop(importe)
+        # Orden de los rechazos: primero lo que identifica la operacion
+        # (codigo y verduleria) y al final el dinero, que es la ultima
+        # confirmacion del operador.
+        diagnostico = diagnosticar_codigo(db, codigo)
+        if diagnostico.motivo == MOTIVO_INVALIDO:
+            raise EmissionError(diagnostico.texto)
+        if diagnostico.motivo == MOTIVO_VIGENTE:
+            # Sin 'error': la pantalla muestra la advertencia con el enlace a la
+            # ficha. Aqui no se decide una reemision ni un reemplazo.
+            return _volver(destino)
+
+        equipo = preparar_equipo_para_emision(
+            db, codigo_raw=codigo, cliente_id=cliente_id, actor_id=user.id
+        )
+
+        seleccion = tipo_emision_por(tipo)
+        importe_cop = 0 if not seleccion.es_pagable else parse_importe_cop(importe)
+
         licencia = emit_license(
             db,
             actor_id=user.id,
@@ -910,8 +962,9 @@ def emitir_submit(
             importe_cop=importe_cop,
         )
     except EmissionError as exc:
+        # Se revierte TODO: si el codigo dio de alta un equipo, tampoco se queda.
         db.rollback()
-        return _volver(f"/emitir?equipo={equipo.id}", error=str(exc))
+        return _volver(destino, error=str(exc))
 
     cliente = db.get(Customer, equipo.cliente_id) if equipo.cliente_id else None
     record_event(

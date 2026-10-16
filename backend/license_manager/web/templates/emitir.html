@@ -14,8 +14,8 @@
     <div>
       <h1 class="titulo">Emitir licencia Frubber POS</h1>
       <p class="subtitulo">
-        Pega el codigo de equipo que genera el TPV, registra el tipo de
-        operacion y firma la licencia FRB1 para entregarla al tecnico.
+        Elige la verduleria, pega el codigo de equipo que genera el TPV y
+        firma la licencia FRB1 para entregarla al tecnico.
       </p>
     </div>
   </div>
@@ -23,10 +23,21 @@
   {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
   {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
 
+  {% if diagnostico and diagnostico.motivo == 'vigente' %}
+  <div class="alerta alerta-aviso">
+    <strong>Codigo repetido: este equipo ya tiene licencia.</strong><br>
+    {{ diagnostico.texto }}<br>
+    <a href="/equipos/{{ diagnostico.equipo.id }}">
+      Abrir la ficha existente del equipo &rarr;
+    </a>
+    &mdash; aqui no se decide una reemision ni un reemplazo.
+  </div>
+  {% endif %}
+
   {% if not firma_disponible %}
   <div class="alerta alerta-aviso">
     <strong>La llave de firma no esta disponible en el servidor.</strong>
-    Puedes navegar y registrar clientes y equipos, pero nadie podra firmar
+    Puedes navegar y registrar verdulerias y equipos, pero nadie podra firmar
     licencias hasta que el Titular Principal cargue la llave privada. Tu
     formulario no se enviara.
   </div>
@@ -38,6 +49,10 @@
 
     <div class="pares">
       <div class="par">
+        <span class="par-etiqueta">Verduleria</span>
+        <span class="par-valor">{{ resultado.equipo.cliente.nombre if resultado.equipo.cliente else 'Sin verduleria asignada' }}</span>
+      </div>
+      <div class="par">
         <span class="par-etiqueta">Equipo</span>
         <span class="codigo-hardware grande">{{ format_hardware_code(resultado.equipo.hardware_code) }}</span>
       </div>
@@ -48,6 +63,10 @@
       <div class="par">
         <span class="par-etiqueta">Fecha de emision</span>
         <span class="par-valor">{{ resultado.emitida_fecha.strftime('%d/%m/%Y') }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Vigencia</span>
+        <span class="par-valor">Vitalicia (POS offline)</span>
       </div>
       <div class="par">
         <span class="par-etiqueta">Importe registrado</span>
@@ -82,33 +101,71 @@
   <div class="tarjeta">
     <h2>Datos de la emision</h2>
 
-    {% if not equipos %}
+    {% if not clientes %}
     <div class="aviso-reglas">
-      <strong>Todavia no hay equipos en el inventario.</strong> Primero
-      <a href="/equipos#alta-equipo">registra el equipo con su codigo de
-      hardware</a> y despues vuelve aqui a firmar la licencia.
+      <strong>Todavia no hay verdulerias registradas.</strong> Primero
+      <a href="/clientes#alta-cliente">registra la verduleria o negocio</a> y
+      despues vuelve aqui a firmar la licencia.
     </div>
     {% else %}
 
-    <form method="post" action="/emitir">
+    <form method="post" action="/emitir" data-formulario-emision>
       <div class="form-grid">
         <div class="campo">
-          <label for="equipo_id">Equipo (codigo de hardware) *</label>
-          <select id="equipo_id" name="equipo_id" required>
-            <option value="" {{ 'selected' if not equipo_previo else '' }}>&mdash; Elige el equipo &mdash;</option>
-            {% for e in equipos %}
-            <option value="{{ e.id }}" {{ 'selected' if equipo_previo and e.id == equipo_previo.id else '' }}
-                    {{ 'disabled' if e.tiene_licencia else '' }}>
-              {{ e.etiqueta }}{% if e.cliente_nombre %} &middot; {{ e.cliente_nombre }}{% endif %}{% if e.tiene_licencia %} &middot; ya tiene licencia vigente{% endif %}
+          <label for="cliente_id">1. Verduleria o negocio *</label>
+          <select id="cliente_id" name="cliente_id" required data-cliente-select>
+            <option value="" {{ 'selected' if not cliente_previo else '' }}>
+              &mdash; Elige la verduleria &mdash;
+            </option>
+            {% for c in clientes %}
+            <option value="{{ c.id }}" data-nombre="{{ c.nombre }}"
+                    {{ 'selected' if cliente_previo and cliente_previo.id == c.id else '' }}>
+              {{ c.nombre }}{% if c.propietario %} &middot; {{ c.propietario }}{% endif %}
             </option>
             {% endfor %}
           </select>
           <p class="pista">
-            El codigo aparece en el TPV de la verduleria. Si el equipo que
-            buscas no esta, <a href="/equipos#alta-equipo">registralo primero</a>.
+            Si la verduleria aun no esta en el sistema,
+            <a href="/clientes#alta-cliente">registrala primero</a>.
           </p>
         </div>
 
+        <div class="campo">
+          <label for="codigo">2. Codigo de equipo (16 caracteres hexadecimales) *</label>
+          <input type="text" id="codigo" name="codigo" maxlength="19"
+                 autocomplete="off" spellcheck="false"
+                 placeholder="XXXX-XXXX-XXXX-XXXX"
+                 value="{{ codigo_sugerido }}" data-codigo-equipo>
+          <p class="pista hint-codigo" data-codigo-hint>
+            Pega el codigo que muestra Frubber POS en la pantalla de activacion
+            del computador.
+          </p>
+        </div>
+      </div>
+
+      <h3 class="titulo-resumen">3. Revision antes de firmar</h3>
+      <div class="resumen-emision">
+        <div class="resumen-item">
+          <span class="resumen-etiqueta">Verduleria</span>
+          <span class="resumen-valor" data-resumen-cliente>{{ cliente_previo.nombre if cliente_previo else '—' }}</span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-etiqueta">Codigo a firmar</span>
+          <span class="resumen-valor resumen-codigo" data-resumen-codigo>
+            {{- diagnostico.formateado if diagnostico and diagnostico.codigo else '----------------' -}}
+          </span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-etiqueta">Emision</span>
+          <span class="resumen-valor">{{ hoy }}</span>
+        </div>
+        <div class="resumen-item">
+          <span class="resumen-etiqueta">Vigencia</span>
+          <span class="resumen-valor resumen-ok">Vitalicia (POS offline)</span>
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-top:4px">
         <div class="campo">
           <label for="tipo">Tipo de licencia *</label>
           <select id="tipo" name="tipo" required>
@@ -116,6 +173,9 @@
             <option value="{{ t.valor }}" {{ 'selected' if loop.first else '' }}>{{ t.etiqueta }}</option>
             {% endfor %}
           </select>
+          <p class="pista">
+            Prueba, reemplazo y cortesia quedan en $0 por definicion.
+          </p>
         </div>
 
         <div class="campo">
@@ -124,19 +184,26 @@
                  placeholder="{{ '{:,}'.format(precio_venta).replace(',', '.') }}" autocomplete="off">
           <p class="pista">
             Precio de referencia: {{ format_cop(precio_venta) }}. Solo aplica a
-            la venta estandar; prueba, reemplazo y cortesia quedan en $0.
-            Escribe pesos enteros, sin centavos.
+            la venta estandar. Escribe pesos enteros, sin centavos.
           </p>
         </div>
       </div>
 
-      <button type="submit" class="btn btn-primario" {% if not firma_disponible %}disabled{% endif %}>
-        Firmar licencia
-      </button>
-      <p class="pista" style="margin-top:10px">
-        La firma se hace en el servidor con la llave privada ECDSA P-256. La
-        licencia queda registrada como vitalicia para esa maquina y el ingreso
-        se anota automaticamente en COP.
+      <div class="alerta alerta-error oculto" data-error-formulario></div>
+
+      <div class="acciones-cabecera">
+        <button type="submit" class="btn btn-primario" {% if not firma_disponible %}disabled{% endif %}>
+          Confirmar y firmar
+        </button>
+        <button type="button" class="btn btn-secundario" data-limpiar-emision>
+          Limpiar formulario
+        </button>
+      </div>
+
+      <p class="pista" style="margin-top:12px">
+        La firma se hace en el servidor con la llave privada ECDSA P-256 y la
+        fecha la toma el sistema. La licencia queda registrada como vitalicia
+        para esa maquina y el ingreso se anota automaticamente en COP.
       </p>
     </form>
     {% endif %}

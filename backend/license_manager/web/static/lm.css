@@ -286,3 +286,48 @@ p.subtitulo { color: var(--text-muted); margin-bottom: 28px; }
   .encabezado-pantalla .btn { width: 100%; text-align: center; }
   .acciones-cabecera .btn { flex: 1; text-align: center; }
 }
+
+
+/* Emision de licencias (UI-05, JHO-101) */
+.campo input[data-codigo-equipo] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.hint-codigo.valido { color: var(--verde-activo); font-weight: 600; }
+.hint-codigo.incompleto { color: var(--ambar-alerta); font-weight: 600; }
+
+.titulo-resumen {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--azul-noche);
+  margin: 18px 0 10px;
+}
+.resumen-emision {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+  background: var(--blanco-frio);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+.resumen-etiqueta {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.resumen-valor { font-size: 14px; font-weight: 700; color: var(--azul-noche); }
+.resumen-valor.resumen-codigo {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 0.04em;
+  color: var(--azul-electrico);
+}
+.resumen-ok { color: var(--verde-activo); }

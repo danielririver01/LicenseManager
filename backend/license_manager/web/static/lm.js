@@ -80,9 +80,140 @@
     });
   }
 
+  /* --------------------------------------------------------------------- *
+   * Emision de licencias (UI-05).
+   *
+   * El codigo que pega el tecnico se formatea en vivo como XXXX-XXXX-XXXX-XXXX
+   * y se valida antes de enviar: 16 hex, sin excepciones. El servidor vuelve a
+   * validar lo mismo; esto existe para que el operador se entere en el momento
+   * y no de ida y vuelta.
+   * --------------------------------------------------------------------- */
+
+  var SOLO_HEX = /[^0-9a-fA-F]/g;
+
+  function despieceCodigo(valor) {
+    var limpio = String(valor || "").replace(SOLO_HEX, "").toUpperCase().slice(0, 16);
+    return {
+      limpio: limpio,
+      texto: limpio.replace(/(.{4})(?=.)/g, "$1-"),
+    };
+  }
+
+  function prepararEmision() {
+    var campo = document.querySelector("[data-codigo-equipo]");
+    if (!campo || !campo.form) {
+      return;
+    }
+
+    var formulario = campo.form;
+    var hint = document.querySelector("[data-codigo-hint]");
+    var resumenCodigo = document.querySelector("[data-resumen-codigo]");
+    var resumenCliente = document.querySelector("[data-resumen-cliente]");
+    var selector = document.querySelector("[data-cliente-select]");
+    var zonaError = document.querySelector("[data-error-formulario]");
+    var botonLimpiar = document.querySelector("[data-limpiar-emision]");
+
+    function ocultarError() {
+      if (zonaError) {
+        zonaError.textContent = "";
+        zonaError.classList.add("oculto");
+      }
+    }
+
+    function mostrarError(mensaje, foco) {
+      if (zonaError) {
+        zonaError.textContent = mensaje;
+        zonaError.classList.remove("oculto");
+      }
+      if (foco) {
+        foco.focus();
+      }
+    }
+
+    function pintar() {
+      var pieza = despieceCodigo(campo.value);
+      if (campo.value !== pieza.texto) {
+        campo.value = pieza.texto;
+      }
+
+      if (resumenCodigo) {
+        resumenCodigo.textContent =
+          pieza.limpio.length === 16 ? pieza.texto : "----------------";
+      }
+
+      if (hint) {
+        if (pieza.limpio.length === 16) {
+          hint.textContent = "✓ Codigo de 16 caracteres hexadecimales listo para firmar.";
+          hint.className = "pista hint-codigo valido";
+        } else if (pieza.limpio.length > 0) {
+          hint.textContent =
+            "Faltan " + (16 - pieza.limpio.length) +
+            " caracteres para completar los 16 hex.";
+          hint.className = "pista hint-codigo incompleto";
+        } else {
+          hint.textContent =
+            "Pega el codigo que muestra Frubber POS en la pantalla de " +
+            "activacion del computador.";
+          hint.className = "pista hint-codigo";
+        }
+      }
+
+      if (selector && resumenCliente) {
+        var opcion = selector.options[selector.selectedIndex];
+        resumenCliente.textContent =
+          opcion && opcion.value
+            ? opcion.getAttribute("data-nombre") || opcion.textContent
+            : "—";
+      }
+
+      ocultarError();
+    }
+
+    campo.addEventListener("input", pintar);
+    if (selector) {
+      selector.addEventListener("change", pintar);
+    }
+
+    formulario.addEventListener("submit", function (evento) {
+      var pieza = despieceCodigo(campo.value);
+      if (pieza.limpio.length !== 16) {
+        evento.preventDefault();
+        mostrarError(
+          "El codigo de equipo debe tener exactamente 16 caracteres " +
+            "hexadecimales (0-9, A-F).",
+          campo
+        );
+        return;
+      }
+      if (selector && !selector.value) {
+        evento.preventDefault();
+        mostrarError(
+          "Elige la verduleria o negocio al que pertenece la maquina.",
+          selector
+        );
+        return;
+      }
+      ocultarError();
+    });
+
+    if (botonLimpiar) {
+      botonLimpiar.addEventListener("click", function () {
+        formulario.reset();
+        pintar();
+        campo.focus();
+      });
+    }
+
+    pintar();
+  }
+
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", prepararBotones);
+    document.addEventListener("DOMContentLoaded", function () {
+      prepararBotones();
+      prepararEmision();
+    });
   } else {
     prepararBotones();
+    prepararEmision();
   }
 })();
