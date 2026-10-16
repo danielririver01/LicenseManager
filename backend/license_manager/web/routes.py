@@ -29,7 +29,17 @@ from license_manager.deps import (
     require_titular,
     state,
 )
-from license_manager.models import Customer, Equipment, Income, License, Role, User, utcnow
+from license_manager.models import (
+    Customer,
+    EmissionType,
+    Equipment,
+    Income,
+    License,
+    Role,
+    Technician,
+    User,
+    utcnow,
+)
 from license_manager.security.passwords import (
     PasswordTooWeak,
     hash_password,
@@ -97,6 +107,21 @@ from license_manager.services.liquidaciones import (
     listar_liquidaciones,
     registrar_liquidacion,
     ventas_del_periodo,
+)
+from license_manager.services.mayorista import (
+    TIPOS_PAQUETE,
+    MayoristaError,
+    consumir_cupo,
+    crear_tecnico,
+    etiqueta_paquete,
+    listar_paquetes,
+    listar_tecnicos,
+    registrar_paquete,
+    resumen_mayorista,
+    saldo_tecnico,
+    set_tecnico_activo,
+    tecnico_de,
+    tecnicos_para_emision,
 )
 from license_manager.services.periodos import (
     PeriodoError,
@@ -901,23 +926,32 @@ def emitir_page(
     codigo: str = "",
     cliente: str = "",
     licencia: str = "",
+    tipo: str = "",
+    tecnico: str = "",
+    justificacion: str = "",
 ):
     """UI-05 · formulario de emision (doc 02, seccion 5.2).
 
     Arranca siempre limpio. Los parametros existen para las entradas reales del
     flujo: ``equipo`` viene de la ficha UI-06 («Emitir licencia para este
-    equipo») y ``codigo``/``cliente`` conservan lo que se escribio cuando un
-    rechazo devuelve el formulario.
+    equipo») y ``codigo``/``cliente``/``tipo``/``tecnico`` conservan lo que se
+    escribio cuando un rechazo devuelve el formulario. ``tecnicos`` (JHO-104)
+    alimenta el selector de paquete prepago.
     """
     user, denied = _sesion_o_login(request, db)
     if denied:
         return denied
 
     resultado = None
+    tecnico_resultado = None
+    saldo_resultado = None
     if licencia:
         resultado = licencia_resultado(db, licencia)
         if resultado is None:
             return _volver("/emitir", error="La licencia indicada no existe.")
+        if resultado.tecnico_id:
+            tecnico_resultado = db.get(Technician, resultado.tecnico_id)
+            saldo_resultado = saldo_tecnico(db, resultado.tecnico_id)
 
     equipo_previo = db.get(Equipment, equipo) if equipo else None
     if equipo and equipo_previo is None:
@@ -952,6 +986,14 @@ def emitir_page(
             "codigo_sugerido": codigo_sugerido,
             "diagnostico": diagnostico,
             "resultado": resultado,
+            "tecnico_resultado": tecnico_resultado,
+            "saldo_resultado": saldo_resultado,
+            # Preservado cuando un rechazo devuelve el formulario.
+            "tipo_previo": tipo,
+            "tecnico_previo": tecnico,
+            "justificacion_previa": justificacion,
+            # Selector de paquete prepago (JHO-104, UI-10).
+            "tecnicos": tecnicos_para_emision(db),
             "precio_venta": PRECIO_VENTA_COP,
             "hoy": hoy.strftime("%d/%m/%Y"),
             "format_cop": format_cop,
@@ -970,15 +1012,27 @@ def emitir_submit(
     codigo: str = Form(""),
     tipo: str = Form(""),
     importe: str = Form(""),
+    tecnico_id: str = Form(""),
+    justificacion: str = Form(""),
     db: Session = Depends(get_db_session),
 ):
-    """UI-05 · valida el codigo pegado, firma y registra el ingreso."""
+    """UI-05 · valida el codigo pegado, firma y registra el ingreso.
+
+    Con ``tecnico_id`` (JHO-104) la venta descuenta un cupo prepago del tecnico
+    y no vuelve a cobrar: el paquete ya se pago al comprarlo.
+    """
     user, denied = _sesion_o_login(request, db)
     if denied:
         return denied
 
     # Todo rechazo devuelve el formulario con lo que se habia escrito.
-    destino = f"/emitir?cliente={quote(cliente_id, safe='')}&codigo={quote(codigo, safe='')}"
+    destino = (
+        f"/emitir?cliente={quote(cliente_id, safe='')}"
+        f"&codigo={quote(codigo, safe='')}"
+        f"&tipo={quote(tipo, safe='')}"
+        f"&tecnico={quote(tecnico_id, safe='')}"
+        f"&justificacion={quote(justificacion, safe='')}"
+    )
 
     if tipo_emision_por(tipo) is None:
         return _volver(destino, error="Elige un tipo de licencia valido.")
@@ -989,6 +1043,19 @@ def emitir_submit(
             error=(
                 "La llave de firma no esta disponible en el servidor. "
                 "No es posible emitir licencias hasta configurarla."
+            ),
+        )
+
+    # Tecnico balancero (opcional): identifica la operacion antes del dinero.
+    tecnico = tecnico_de(db, tecnico_id)
+    if tecnico_id and tecnico is None:
+        return _volver(destino, error="El tecnico indicado no existe.")
+    if tecnico is not None and not tecnico.activo:
+        return _volver(
+            destino,
+            error=(
+                f"La cuenta de {tecnico.nombre} esta desactivada: no se emiten "
+                "licencias a su nombre."
             ),
         )
 
@@ -1009,7 +1076,19 @@ def emitir_submit(
         )
 
         seleccion = tipo_emision_por(tipo)
-        importe_cop = 0 if not seleccion.es_pagable else parse_importe_cop(importe)
+
+        # Cupo prepago: solo una venta comercial a nombre de un tecnico lo
+        # descuenta. Se hace dentro de la transaccion de la emision para que un
+        # rechazo posterior devuelva tambien el cupo (doc 04, secciones 5 y 6).
+        paquete = None
+        if tecnico is not None and seleccion.es_pagable:
+            paquete = consumir_cupo(db, tecnico)
+
+        # Si el cupo cubre la venta no se vuelve a cobrar: el importe no se
+        # exige ni se usa. Solo una venta directa de la sociedad lo necesita.
+        importe_cop = 0
+        if seleccion.es_pagable and paquete is None:
+            importe_cop = parse_importe_cop(importe)
 
         licencia = emit_license(
             db,
@@ -1018,8 +1097,11 @@ def emitir_submit(
             equipo=equipo,
             tipo=tipo,
             importe_cop=importe_cop,
+            tecnico=tecnico,
+            paquete=paquete,
+            justificacion=justificacion,
         )
-    except EmissionError as exc:
+    except (EmissionError, MayoristaError) as exc:
         # Se revierte TODO: si el codigo dio de alta un equipo, tampoco se queda.
         db.rollback()
         return _volver(destino, error=str(exc))
@@ -1039,6 +1121,16 @@ def emitir_submit(
             "hardware_code": equipo.hardware_code,
             "cliente_id": equipo.cliente_id,
             "cliente_nombre": cliente.nombre if cliente else None,
+            # Trazabilidad del modelo mayorista (JHO-104).
+            "tecnico_id": tecnico.id if tecnico else None,
+            "tecnico_nombre": tecnico.nombre if tecnico else None,
+            "paquete_id": licencia.paquete_id,
+            "cupo_descontado": licencia.cupo_descontado,
+            "justificacion": (
+                justificacion.strip() or None
+                if licencia.tipo_emision == EmissionType.REPLACEMENT.value
+                else None
+            ),
         },
     )
     db.commit()
@@ -1636,4 +1728,190 @@ def liquidaciones_soporte(
             "format_cop": format_cop,
             "etiqueta_comision": etiqueta_comision,
         },
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Modelo mayorista: tecnicos y paquetes prepago (UI-10, JHO-104)
+# --------------------------------------------------------------------------- #
+#
+# Los tres roles consultan el saldo y registran tecnicos (igual que registran
+# verdulerias: doc 04 v2.1, seccion 7). La COMPRA de cupos la registran solo
+# los Titulares: la seccion 5 les atribuye la recarga de cupos, y es una
+# entrada de dinero de la sociedad.
+
+
+def _mayorista_titular(request: Request, db: Session) -> User | None:
+    """Usuario autenticado si es Titular; 403 uniforme si es delegado."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return None
+    if not Role(user.rol).is_titular:
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Solo el Titular Principal y el Co-Titular registran compras de "
+                "paquetes mayoristas."
+            ),
+        )
+    return user
+
+
+@pages_router.get("/mayorista", response_class=HTMLResponse)
+def mayorista_page(request: Request, db: Session = Depends(get_db_session), q: str = ""):
+    """UI-10 · tecnicos balanceros, paquetes prepago y saldo de cupos."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    filas = listar_tecnicos(db, q)
+    return _render(
+        request,
+        "mayorista.html",
+        {
+            "seccion": "mayorista",
+            "tecnicos": filas,
+            "paquetes": listar_paquetes(db),
+            "tipos_paquete": TIPOS_PAQUETE,
+            "resumen": resumen_mayorista(db),
+            "metodos": METODOS_PAGO,
+            "busqueda": q.strip(),
+            "total": len(filas),
+            "puede_registrar": Role(user.rol).is_titular,
+            "precio_venta": PRECIO_VENTA_COP,
+            "format_cop": format_cop,
+            "format_hardware_code": format_hardware_code,
+            "aviso": request.query_params.get("aviso"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@pages_router.post("/mayorista/tecnicos")
+def mayorista_crear_tecnico(
+    request: Request,
+    nombre: str = Form(""),
+    telefono: str = Form(""),
+    email: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-10 · alta de un tecnico balancero."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    try:
+        tecnico = crear_tecnico(
+            db,
+            actor_id=user.id,
+            nombre=nombre,
+            telefono=telefono,
+            email=email,
+        )
+    except MayoristaError as exc:
+        db.rollback()
+        return _volver("/mayorista", error=str(exc))
+
+    record_event(
+        db,
+        action="tecnico.creado",
+        user=user,
+        entity_type="tecnico",
+        entity_id=tecnico.id,
+        detail={"nombre": tecnico.nombre},
+    )
+    db.commit()
+
+    return _volver("/mayorista", aviso=f"Tecnico {tecnico.nombre} registrado.")
+
+
+@pages_router.post("/mayorista/tecnicos/{tecnico_id}/alternar")
+def mayorista_alternar_tecnico(
+    request: Request,
+    tecnico_id: str,
+    activo: str = Form("0"),
+    db: Session = Depends(get_db_session),
+):
+    """UI-10 · activa/desactiva un tecnico sin borrar su saldo ni su historial."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+    if not Role(user.rol).is_titular:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo el Titular Principal y el Co-Titular gestionan tecnicos.",
+        )
+
+    tecnico = tecnico_de(db, tecnico_id)
+    if tecnico is None:
+        return _volver("/mayorista", error="El tecnico indicado no existe.")
+
+    set_tecnico_activo(db, tecnico=tecnico, activo=activo == "1")
+    record_event(
+        db,
+        action="tecnico.actualizado",
+        user=user,
+        entity_type="tecnico",
+        entity_id=tecnico.id,
+        detail={"nombre": tecnico.nombre, "activo": tecnico.activo},
+    )
+    db.commit()
+
+    estado = "activado" if tecnico.activo else "desactivado"
+    return _volver("/mayorista", aviso=f"Tecnico {tecnico.nombre} {estado}.")
+
+
+@pages_router.post("/mayorista/paquetes")
+def mayorista_registrar_paquete(
+    request: Request,
+    tecnico_id: str = Form(""),
+    tipo: str = Form(""),
+    metodo: str = Form(""),
+    comprobante: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-10 · registro de la compra de un paquete prepago (Titulares)."""
+    user = _mayorista_titular(request, db)
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+
+    try:
+        paquete, ingreso = registrar_paquete(
+            db,
+            actor_id=user.id,
+            tecnico_id=tecnico_id,
+            tipo=tipo,
+            metodo_pago=metodo,
+            comprobante=comprobante,
+        )
+    except MayoristaError as exc:
+        db.rollback()
+        return _volver("/mayorista", error=str(exc))
+
+    tecnico = tecnico_de(db, paquete.tecnico_id)
+    record_event(
+        db,
+        action="paquete.registrado",
+        user=user,
+        entity_type="paquete",
+        entity_id=paquete.id,
+        detail={
+            "tecnico_id": paquete.tecnico_id,
+            "tecnico_nombre": tecnico.nombre if tecnico else None,
+            "tipo_paquete": paquete.tipo_paquete,
+            "licencias": int(paquete.licencias_total),
+            "valor_total_cop": int(paquete.valor_total_cop),
+            "ingreso_id": ingreso.id,
+            "metodo_pago": ingreso.metodo_pago,
+        },
+    )
+    db.commit()
+
+    return _volver(
+        "/mayorista",
+        aviso=(
+            f"{etiqueta_paquete(paquete.tipo_paquete)} registrado para "
+            f"{tecnico.nombre if tecnico else 'el tecnico'}: "
+            f"{saldo_tecnico(db, paquete.tecnico_id)} cupos disponibles."
+        ),
     )

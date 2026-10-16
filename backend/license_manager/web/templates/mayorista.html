@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block titulo %}Mayorista · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  <div class="encabezado-pantalla">
+    <div>
+      <h1 class="titulo">Técnicos y Paquetes Prepago (Mayorista)</h1>
+      <p class="subtitulo">
+        Los técnicos balanceros compran cupos por adelantado y los revenden al
+        público en $ 450.000 COP. La sociedad cobra el paquete completo al
+        registrarlo; cada emisión a nombre del técnico descuenta un cupo.
+      </p>
+    </div>
+    <div class="acciones-cabecera">
+      <a class="btn btn-secundario" href="#paquetes">Ver paquetes</a>
+      <a class="btn btn-primario" href="/emitir">Emitir licencia</a>
+    </div>
+  </div>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  <!-- KPI del modelo mayorista (doc 04 v2.1, secciones 3 y 5) -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="etiqueta">Técnicos activos</div>
+      <div class="valor">{{ resumen.tecnicos_activos_n }}</div>
+      <div class="pista">Balanceros con saldo prepago</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Cupos disponibles</div>
+      <div class="valor" style="color:var(--verde-activo)">{{ resumen.cupos_disponibles }}</div>
+      <div class="pista">De {{ resumen.cupos_vendidos }} cupos comprados</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Cupos consumidos</div>
+      <div class="valor" style="color:var(--azul-electrico)">{{ resumen.cupos_usados }}</div>
+      <div class="pista">Emisiones comerciales descontadas</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Recaudado mayorista</div>
+      <div class="valor" style="color:var(--azul-noche)">{{ format_cop(resumen.recaudado_cop) }}</div>
+      <div class="pista">Cobrado por adelantado a los técnicos</div>
+    </div>
+  </div>
+
+  <div class="rejilla-ficha">
+    <!-- Alta de técnico: la registran los tres roles, como las verdulerías. -->
+    <div class="tarjeta">
+      <h2>Registrar técnico balancero</h2>
+      <form method="post" action="/mayorista/tecnicos">
+        <div class="form-grid">
+          <div class="campo">
+            <label for="nombre">Nombre completo *</label>
+            <input type="text" id="nombre" name="nombre" required maxlength="160"
+                   placeholder="Ej. Carlos Gómez" autocomplete="off">
+          </div>
+          <div class="campo">
+            <label for="telefono">Teléfono</label>
+            <input type="text" id="telefono" name="telefono" maxlength="40"
+                   placeholder="Ej. 300 123 4567" autocomplete="off">
+          </div>
+          <div class="campo">
+            <label for="email">Correo</label>
+            <input type="email" id="email" name="email" maxlength="255"
+                   placeholder="Ej. carlos@balanzas.co" autocomplete="off">
+          </div>
+        </div>
+        <div class="acciones-cabecera">
+          <button type="submit" class="btn btn-primario">Registrar técnico</button>
+        </div>
+        <p class="pista" style="margin-top:12px">
+          Registrar al técnico no crea una cuenta de acceso: es el directorio de
+          aliados a los que se les venden paquetes prepago.
+        </p>
+      </form>
+    </div>
+
+    <!-- Registro de compra de paquete: solo Titulares (doc 04, sección 5). -->
+    <div class="tarjeta">
+      <h2>Registrar compra de paquete</h2>
+      {% if puede_registrar %}
+      {% if tecnicos %}
+      <form method="post" action="/mayorista/paquetes">
+        <div class="campo">
+          <label for="tecnico_paquete">Técnico comprador *</label>
+          <select id="tecnico_paquete" name="tecnico_id" required>
+            <option value="">— Elige el técnico —</option>
+            {% for tec in tecnicos %}
+            <option value="{{ tec.id }}" {{ 'disabled' if not tec.activo else '' }}>
+              {{ tec.nombre }}{% if not tec.activo %} (inactivo){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="tipo_paquete">Paquete mayorista *</label>
+          <select id="tipo_paquete" name="tipo" required>
+            {% for tp in tipos_paquete %}
+            <option value="{{ tp.valor }}">{{ tp.etiqueta }} — {{ format_cop(tp.valor_total_cop) }}</option>
+            {% endfor %}
+          </select>
+          <p class="pista">
+            Margen del técnico por licencia: {{ format_cop(precio_venta) }} al
+            público menos el costo unitario del paquete.
+          </p>
+        </div>
+        <div class="form-grid">
+          <div class="campo">
+            <label for="metodo_paquete">Canal de pago</label>
+            <select id="metodo_paquete" name="metodo">
+              <option value="">— Sin método registrado —</option>
+              {% for valor, etiqueta in metodos %}
+              <option value="{{ valor }}">{{ etiqueta }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="campo">
+            <label for="comprobante_paquete">Comprobante / referencia</label>
+            <input type="text" id="comprobante_paquete" name="comprobante"
+                   maxlength="120" placeholder="Ej. Transferencia Bancolombia #77120" autocomplete="off">
+          </div>
+        </div>
+        <div class="acciones-cabecera">
+          <button type="submit" class="btn btn-primario"
+                  data-confirmar="Registrar la compra del paquete? El valor completo entra como recaudacion mayorista.">
+            Registrar paquete
+          </button>
+        </div>
+      </form>
+      {% else %}
+      <div class="aviso-reglas">
+        <strong>Primero registra un técnico.</strong> El paquete prepago se
+        asocia a un técnico balancero; usa el formulario de la izquierda.
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="aviso-reglas">
+        <strong>Registro reservado a los Titulares.</strong> Los administradores
+        delegados consultan el saldo y emiten licencias, pero la compra de
+        paquetes (una entrada de dinero de la sociedad) la registra el Titular
+        Principal o el Co-Titular.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Directorio de técnicos con su saldo consolidado -->
+  <form class="barra-filtros" method="get" action="/mayorista" style="margin-top:20px">
+    <input type="search" name="q" value="{{ busqueda }}"
+           placeholder="Buscar técnico por nombre, correo o teléfono..."
+           aria-label="Buscar técnico">
+    <button type="submit" class="btn btn-secundario">Aplicar</button>
+    <a class="btn-limpio" href="/mayorista">Limpiar</a>
+    <span class="cuenta-filas">{{ total }} técnico{{ 's' if total != 1 else '' }}</span>
+  </form>
+
+  <div class="tabla-envoltura">
+    <div class="tabla-titulo">
+      <h2>Saldo de cupos por técnico</h2>
+      <span class="cuenta-filas">Cupos disponibles = comprados − consumidos</span>
+    </div>
+    <div class="tabla-scroll">
+      <table class="tabla-operadores tabla-mayorista">
+        <thead>
+          <tr>
+            <th>Técnico</th>
+            <th>Contacto</th>
+            <th>Paquetes</th>
+            <th>Cupos disponibles</th>
+            <th>Consumidos</th>
+            <th>Estado</th>
+            {% if puede_registrar %}<th>Acción</th>{% endif %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for tec in tecnicos %}
+          <tr>
+            <td><div class="fila-nombre">{{ tec.nombre }}</div></td>
+            <td>
+              {% if tec.email %}<div class="correo">{{ tec.email }}</div>{% endif %}
+              {% if tec.telefono %}<div class="fila-sub">{{ tec.telefono }}</div>{% endif %}
+              {% if not tec.email and not tec.telefono %}<span class="notilla">—</span>{% endif %}
+            </td>
+            <td>{{ tec.paquetes_n }}</td>
+            <td>
+              <strong style="font-size:15px;color:{{ 'var(--verde-activo)' if tec.cupos_disponibles > 0 else 'var(--rojo-peligro)' }}">
+                {{ tec.cupos_disponibles }}
+              </strong>
+              <div class="fila-sub">de {{ tec.cupos_totales }} comprados</div>
+            </td>
+            <td>{{ tec.cupos_usados }}</td>
+            <td>
+              <span class="badge badge-{{ 'verde' if tec.activo else 'gris' }}">
+                {{ 'Activo' if tec.activo else 'Inactivo' }}
+              </span>
+            </td>
+            {% if puede_registrar %}
+            <td>
+              <form class="accion-form" method="post" action="/mayorista/tecnicos/{{ tec.id }}/alternar">
+                <input type="hidden" name="activo" value="{{ '0' if tec.activo else '1' }}">
+                <button type="submit" class="btn-fila {{ 'peligro' if tec.activo else 'activo' }}"
+                        data-confirmar="{{ 'Desactivar' if tec.activo else 'Activar' }} a {{ tec.nombre }}? Su saldo y su historial se conservan.">
+                  {{ 'Desactivar' if tec.activo else 'Activar' }}
+                </button>
+              </form>
+            </td>
+            {% endif %}
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="{{ 7 if puede_registrar else 6 }}" style="padding:36px;text-align:center;color:var(--text-muted)">
+              {% if busqueda %}
+              No hay técnicos que coincidan con la búsqueda.
+              {% else %}
+              Todavía no hay técnicos registrados. Empieza por registrar el
+              primer balancero aliado.
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Historial de compras de paquetes prepago -->
+  <div class="tabla-envoltura" id="paquetes" style="margin-top:20px">
+    <div class="tabla-titulo">
+      <h2>Compras de paquetes prepago</h2>
+      <span class="cuenta-filas">{{ paquetes|length }} paquete{{ 's' if paquetes|length != 1 else '' }}</span>
+    </div>
+    <div class="tabla-scroll">
+      <table class="tabla-operadores tabla-mayorista">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Técnico</th>
+            <th>Paquete</th>
+            <th>Cupos</th>
+            <th>Valor (COP)</th>
+            <th>Costo unitario</th>
+            <th>Consumidos</th>
+            <th>Registró</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in paquetes %}
+          <tr>
+            <td>{{ p.comprado_at.strftime('%d/%m/%Y') }}</td>
+            <td>{{ p.tecnico_nombre }}</td>
+            <td>{{ p.tipo_etiqueta }}</td>
+            <td>{{ p.licencias_total }}</td>
+            <td>{{ format_cop(p.valor_total_cop) }}</td>
+            <td>{{ format_cop(p.costo_unitario_cop) }}</td>
+            <td>{{ p.licencias_usadas }} <span class="fila-sub">({{ p.cupos_disponibles }} libres)</span></td>
+            <td>{{ p.registrado_por or '—' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="8" style="padding:36px;text-align:center;color:var(--text-muted)">
+              Todavía no se ha registrado ninguna compra de paquete prepago.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="aviso-reglas" style="margin-top:20px">
+    <strong>Reglas del modelo mayorista:</strong> el técnico compra cupos por
+    adelantado y la sociedad cobra el paquete completo en ese momento; cada
+    venta comercial a su nombre descuenta UN cupo del paquete más antiguo con
+    saldo. Una reemisión por reemplazo físico justificado va a $ 0 COP y NO
+    descuenta cupo (la licencia original ya estaba pagada); una caja adicional
+    sí consume cupo regular. Sin saldo no hay emisión.
+  </div>
+
+</div>
+{% endblock %}

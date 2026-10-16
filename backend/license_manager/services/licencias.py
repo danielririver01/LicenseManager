@@ -36,6 +36,8 @@ from license_manager.models import (
     IncomeCategory,
     License,
     PaymentStatus,
+    Technician,
+    WholesalePackage,
     utcnow,
 )
 from license_manager.services.directory import (
@@ -50,6 +52,10 @@ PRECIO_VENTA_COP = 450_000
 
 # Ciclo de prueba (LM-RF-008): 30 dias sin cobro.
 DIAS_PRUEBA = 30
+
+# Reemision por reemplazo (doc 04 v2.1, seccion 6.2): el tecnico certifica el
+# cambio fisico. La justificacion no puede ser una palabra suelta.
+LARGO_MINIMO_JUSTIFICACION = 10
 
 
 class EmissionError(ValueError):
@@ -128,6 +134,26 @@ def _categoria_de(tipo: str) -> str:
     }[tipo]
 
 
+def _categoria_de_emision(tipo: str, con_paquete: bool) -> str:
+    """Categoria del movimiento automatico de una emision (JHO-104).
+
+    Una venta cubierta por un paquete prepago no vuelve a cobrar: se registra
+    como ``paquete_mayorista`` de $ 0 COP para documentar el cupo consumido sin
+    inflar la recaudacion de UI-07 / UI-07B.
+    """
+    if con_paquete:
+        return IncomeCategory.WHOLESALE_PACKAGE.value
+    return _categoria_de(tipo)
+
+
+def _nota_de_emision(tipo: str, tecnico: Technician | None, motivo: str) -> str:
+    if tipo == EmissionType.REPLACEMENT.value and motivo:
+        return f"Reemplazo justificado: {motivo}"
+    if tecnico is not None:
+        return f"Emision a nombre de {tecnico.nombre}."
+    return f"Registro automatico al emitir licencia {tipo}."
+
+
 def _validar_importe(tipo: TipoEmision, importe_cop: int | None) -> int:
     if not tipo.es_pagable:
         # Prueba, reemplazo y cortesia no generan ingreso: $0 por definicion.
@@ -160,11 +186,18 @@ def emit_license(
     equipo: Equipment,
     tipo: str,
     importe_cop: int | None = None,
+    tecnico: Technician | None = None,
+    paquete: WholesalePackage | None = None,
+    justificacion: str | None = None,
 ) -> License:
     """Firma una licencia FRB1 para el equipo y registra su ingreso.
 
     Devuelve la licencia ya agregada a la sesion (sin commit): la ruta decide
     si confirma o revierte segun el resultado del resto de la transaccion.
+
+    ``tecnico``/``paquete`` llegan ya resueltos por la ruta (JHO-104): el
+    paquete es el que la ruta acaba de descontar, o ``None`` si la emision no
+    consume cupo. ``justificacion`` es obligatoria en un reemplazo.
     """
     seleccion = tipo_emision_por(tipo)
     if seleccion is None:
@@ -177,7 +210,29 @@ def emit_license(
         )
 
     _asegurar_equipo_disponible(db, equipo)
-    monto = _validar_importe(seleccion, importe_cop)
+    # Un cupo prepago YA esta pagado: la emision no vuelve a cobrar ni un peso,
+    # aunque el operador haya escrito la tarifa de referencia en el importe.
+    monto = 0 if paquete is not None else _validar_importe(seleccion, importe_cop)
+
+    motivo = (justificacion or "").strip()
+    if seleccion.valor == EmissionType.REPLACEMENT.value and len(motivo) < LARGO_MINIMO_JUSTIFICACION:
+        raise EmissionError(
+            "Una reemision por reemplazo exige certificar el cambio fisico "
+            f"(minimo {LARGO_MINIMO_JUSTIFICACION} caracteres)."
+        )
+
+    # Coherencia del cupo: una venta a nombre de un tecnico SIEMPRE descuenta
+    # uno; un reemplazo NUNCA lo descuenta (doc 04, seccion 6.2).
+    if seleccion.es_pagable and tecnico is not None and paquete is None:
+        raise EmissionError(
+            f"{tecnico.nombre} no tiene un cupo preparado para esta emision. "
+            "Revisa su saldo prepago antes de firmar."
+        )
+    if not seleccion.es_pagable and paquete is not None:
+        raise EmissionError(
+            "Solo una venta comercial consume cupo prepago; el reemplazo, la "
+            "prueba y la cortesia van a $ 0 sin descontar saldo."
+        )
 
     emitida_fecha = utcnow().astimezone(UTC).date()
     licencia_text = sign_license(
@@ -196,6 +251,9 @@ def emit_license(
         estado_registro="vigente",
         estado_cobro=_estado_cobro_de(seleccion.valor),
         emitida_fecha=emitida_fecha,
+        tecnico_id=tecnico.id if tecnico else None,
+        paquete_id=paquete.id if paquete else None,
+        cupo_descontado=paquete is not None,
         creado_por_id=actor_id,
     )
     db.add(licencia)
@@ -204,12 +262,12 @@ def emit_license(
     db.add(
         Income(
             licencia_id=licencia.id,
-            categoria=_categoria_de(seleccion.valor),
+            categoria=_categoria_de_emision(seleccion.valor, paquete is not None),
             monto_cop=monto,
             moneda="COP",
             estado_pago=PaymentStatus.PAID.value,
             metodo_pago=None,
-            nota=f"Registro automatico al emitir licencia {seleccion.valor}.",
+            nota=_nota_de_emision(seleccion.valor, tecnico, motivo),
             periodo=emitida_fecha,
             pagado_at=utcnow() if monto > 0 else None,
             creado_por_id=actor_id,

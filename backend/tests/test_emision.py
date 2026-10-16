@@ -62,17 +62,23 @@ def _emitir(
     codigo: str = CODIGO,
     tipo: str = "comercial",
     importe: str = "450.000",
+    justificacion: str | None = None,
+    tecnico_id: str = "",
 ):
-    return client.post(
-        "/emitir",
-        data={
-            "cliente_id": cliente_id,
-            "codigo": codigo,
-            "tipo": tipo,
-            "importe": importe,
-        },
-        follow_redirects=False,
-    )
+    datos = {
+        "cliente_id": cliente_id,
+        "codigo": codigo,
+        "tipo": tipo,
+        "importe": importe,
+        "tecnico_id": tecnico_id,
+    }
+    if justificacion is not None:
+        datos["justificacion"] = justificacion
+    elif tipo == "reemplazo":
+        # Doc 04 v2.1 seccion 6.2: toda reemision por reemplazo certifica el
+        # cambio fisico; sin esa justificacion el servidor la rechaza.
+        datos["justificacion"] = "Cambio de placa base por dano fisico"
+    return client.post("/emitir", data=datos, follow_redirects=False)
 
 
 # --------------------------------------------------------------------------- #

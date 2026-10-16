@@ -451,6 +451,7 @@ p.subtitulo { color: var(--text-muted); margin-bottom: 28px; }
 .tabla-titulo h2 { font-size: 15px; font-weight: 700; color: var(--azul-noche); margin-bottom: 0; }
 .tabla-cierres { min-width: 860px; }
 .tabla-liquidaciones { min-width: 940px; }
+.tabla-mayorista { min-width: 900px; }
 
 .lista-resumen { display: flex; flex-direction: column; gap: 14px; }
 .fila-resumen { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; }

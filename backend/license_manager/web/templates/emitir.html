@@ -72,6 +72,19 @@
         <span class="par-etiqueta">Importe registrado</span>
         <span class="par-valor" style="font-size:16px">{{ format_cop(resultado.ingresos[0].monto_cop) if resultado.ingresos else '$0 COP' }}</span>
       </div>
+      {% if resultado.cupo_descontado %}
+      <div class="par">
+        <span class="par-etiqueta">Cupo prepago</span>
+        <span class="par-valor" style="color:var(--verde-activo)">
+          1 cupo descontado{% if tecnico_resultado %} · {{ tecnico_resultado.nombre }} (saldo: {{ saldo_resultado }}){% endif %}
+        </span>
+      </div>
+      {% elif tecnico_resultado %}
+      <div class="par">
+        <span class="par-etiqueta">Tecnico</span>
+        <span class="par-valor">{{ tecnico_resultado.nombre }} &middot; sin cupo descontado</span>
+      </div>
+      {% endif %}
     </div>
 
     <div class="bloque-licencia">
@@ -170,7 +183,10 @@
           <label for="tipo">Tipo de licencia *</label>
           <select id="tipo" name="tipo" required>
             {% for t in tipos %}
-            <option value="{{ t.valor }}" {{ 'selected' if loop.first else '' }}>{{ t.etiqueta }}</option>
+            <option value="{{ t.valor }}"
+                    {{ 'selected' if (tipo_previo and tipo_previo == t.valor) or (not tipo_previo and loop.first) else '' }}>
+              {{ t.etiqueta }}
+            </option>
             {% endfor %}
           </select>
           <p class="pista">
@@ -184,7 +200,44 @@
                  placeholder="{{ '{:,}'.format(precio_venta).replace(',', '.') }}" autocomplete="off">
           <p class="pista">
             Precio de referencia: {{ format_cop(precio_venta) }}. Solo aplica a
-            la venta estandar. Escribe pesos enteros, sin centavos.
+            la venta estandar directa. Con un tecnico de paquete prepago el
+            importe no se usa: el cupo ya estaba pagado.
+          </p>
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-top:4px">
+        <div class="campo">
+          <label for="tecnico_id">Tecnico / paquete prepago (opcional)</label>
+          <select id="tecnico_id" name="tecnico_id">
+            <option value="" {{ 'selected' if not tecnico_previo else '' }}>
+              &mdash; Venta directa de la sociedad &mdash;
+            </option>
+            {% for tec in tecnicos %}
+            <option value="{{ tec.id }}" {{ 'selected' if tecnico_previo == tec.id else '' }}>
+              {{ tec.nombre }} ({{ tec.cupos_disponibles }} cupo{{ 's' if tec.cupos_disponibles != 1 else '' }}{% if not tec.activo %} &middot; inactivo{% endif %})
+            </option>
+            {% endfor %}
+          </select>
+          <p class="pista">
+            Al elegir un tecnico, la venta descuenta 1 cupo de su paquete
+            prepago y no vuelve a cobrar: el cupo ya se pago al comprarlo.
+            Un reemplazo o una cortesia a su nombre no consumen cupo.
+            {% if not tecnicos %}
+            Todavia no hay tecnicos registrados:
+            <a href="/mayorista">registralos en Mayorista</a>.
+            {% endif %}
+          </p>
+        </div>
+
+        <div class="campo">
+          <label for="justificacion">Justificacion del reemplazo</label>
+          <input type="text" id="justificacion" name="justificacion" maxlength="200"
+                 value="{{ justificacion_previa }}" autocomplete="off"
+                 placeholder="Ej. Cambio de placa base por dano fisico">
+          <p class="pista">
+            Obligatoria cuando el tipo es Reemplazo: certifica el cambio fisico
+            de la maquina (minimo 10 caracteres).
           </p>
         </div>
       </div>
