@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block titulo %}Cierres mensuales · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  <div class="encabezado-pantalla">
+    <div>
+      <h1 class="titulo">Ingresos Mensuales y Cierres</h1>
+      <p class="subtitulo">
+        Consolidado del mes en pesos colombianos enteros: lo cobrado, lo
+        pendiente, el comparativo semestral y el detalle atribuido a cada
+        persona. Aquí no se modifica nada: es la lectura de lo que ya pasó.
+      </p>
+    </div>
+
+    <!-- Selector de mes: el operador NUNCA digita una fecha, solo navega. -->
+    <div class="selector-mes">
+      <a class="mes-flecha" href="/cierres?periodo={{ periodo_anterior }}" aria-label="Mes anterior">&lsaquo;</a>
+      <span class="mes-actual">{{ etiqueta }}</span>
+      <a class="mes-flecha" href="/cierres?periodo={{ periodo_siguiente }}" aria-label="Mes siguiente">&rsaquo;</a>
+    </div>
+  </div>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  <!-- 4 tarjetas de métricas del mes seleccionado (mockup UI-07B) -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="etiqueta">Ingresos totales (mes)</div>
+      <div class="valor" style="color:var(--verde-activo)">{{ format_cop(cierre.total_cop) }}</div>
+      <div class="pista">
+        {% if cierre.variacion_pct is not none %}
+          {% if cierre.variacion_pct >= 0 %}&uarr; +{{ cierre.variacion_pct }}%{% else %}&darr; {{ cierre.variacion_pct }}%{% endif %}
+          vs mes anterior
+        {% else %}Sin base comparable del mes anterior{% endif %}
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Licencias cobradas</div>
+      <div class="valor">{{ cierre.licencias_n }} <span style="font-size:14px;font-weight:600;color:var(--text-muted)">licencias</span></div>
+      <div class="pista">Tarifa estándar: {{ format_cop(precio_venta) }}</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Cobros pendientes</div>
+      <div class="valor" style="color:var(--ambar-alerta)">{{ format_cop(cierre.pendientes_cop) }}</div>
+      <div class="pista">
+        {% if cierre.pendientes_n %}
+        {{ cierre.pendientes_n }} cuenta{{ 's' if cierre.pendientes_n != 1 else '' }} en gracia (día 31)
+        {% else %}Ninguna cuenta en gracia{% endif %}
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Reemplazos / cortesías</div>
+      <div class="valor" style="color:var(--text-muted)">{{ cierre.gratuitos_n }} <span style="font-size:14px;font-weight:600;color:var(--text-muted)">equipos</span></div>
+      <div class="pista">Sin costo ({{ format_cop(0) }} segregado)</div>
+    </div>
+  </div>
+
+  <!-- Comparativo semestral en barras + exportación del cierre -->
+  <div class="tarjeta">
+    <div class="chart-cabecera">
+      <div>
+        <h2 style="margin-bottom:2px">Comportamiento semestral de ingresos (COP)</h2>
+        <p class="pista" style="margin-top:0">Cierres mensuales de la base de datos local</p>
+      </div>
+      <a class="btn btn-secundario" href="/cierres/exportar?periodo={{ periodo_actual }}">&#128229; Exportar cierre</a>
+    </div>
+
+    <div class="barras">
+      {% for barra in cierre.barras %}
+      <div class="barra-col">
+        <div class="barra-valor{{ ' barra-valor-activo' if barra.activa else '' }}">
+          {{ format_millones(barra.monto_cop) }}
+        </div>
+        <div class="barra-relleno{{ ' activa' if barra.activa else '' }}{{ ' maxima' if barra.maxima else '' }}"
+             style="height: {{ barra.alto_pct if barra.alto_pct else 2 }}%;"
+             title="{{ format_cop(barra.monto_cop) }}"></div>
+        <div class="barra-etiqueta{{ ' activa' if barra.activa else '' }}">
+          {{ barra.etiqueta }}{% if barra.activa %} (hoy){% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Desglose del mes vs. resumen de cierre -->
+  <div class="desglose">
+    <div class="tabla-envoltura">
+      <div class="tabla-titulo">
+        <h2>Detalle de cobros del mes ({{ etiqueta }})</h2>
+        <span class="cuenta-filas">{{ cierre.movimientos|length }} movimiento{{ 's' if cierre.movimientos|length != 1 else '' }}</span>
+      </div>
+      <div class="tabla-scroll">
+        <table class="tabla-operadores tabla-cierres">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Verdulería / Negocio</th>
+              <th>Código equipo</th>
+              <th>Categoría</th>
+              <th>Importe (COP)</th>
+              <th>Estado</th>
+              <th>Registró</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for mov in cierre.movimientos %}
+            <tr>
+              <td>{{ mov.fecha.strftime('%d/%m/%Y') }}</td>
+              <td>
+                <div class="fila-nombre">{{ mov.cliente_nombre }}</div>
+                {% if mov.nota %}<div class="fila-sub">{{ mov.nota }}</div>{% endif %}
+              </td>
+              <td>
+                {% if mov.hardware_code %}
+                <code class="id-corto">{{ format_hardware_code(mov.hardware_code) }}</code>
+                {% else %}<span class="notilla">—</span>{% endif %}
+              </td>
+              <td>{{ mov.categoria_etiqueta }}</td>
+              <td><strong class="monto-cop">{{ format_cop(mov.monto_cop) }}</strong></td>
+              <td><span class="badge badge-{{ 'verde' if mov.estado_pago == 'pagado' else 'ambar' }}">{{ mov.estado_etiqueta }}</span></td>
+              <td>{{ mov.registrado_por }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="7" style="padding:36px;text-align:center;color:var(--text-muted)">
+                Este mes todavía no tiene movimientos registrados.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Resumen de cierre (auditoría del Titular) -->
+    <div class="tarjeta">
+      <h2>Cierre y liquidación mensual</h2>
+      <div class="lista-resumen">
+        <div class="fila-resumen">
+          <span class="resumen-etiqueta">Total ventas brutas:</span>
+          <span class="resumen-valor">{{ format_cop(cierre.total_cop) }}</span>
+        </div>
+
+        {% for persona in cierre.reparto %}
+        <div class="fila-resumen">
+          <span class="resumen-etiqueta">Cobrado por {{ persona.nombre }}:</span>
+          <span class="resumen-valor">{{ format_cop(persona.monto_cop) }} ({{ persona.movimientos_n }} mov.)</span>
+        </div>
+        {% else %}
+        <div class="fila-resumen">
+          <span class="resumen-etiqueta">Reparto por persona:</span>
+          <span class="resumen-valor">Sin cobros en el mes</span>
+        </div>
+        {% endfor %}
+
+        <div class="linea-separadora"></div>
+
+        <div class="fila-resumen">
+          <span class="resumen-etiqueta">Promedio diario de ventas:</span>
+          <span class="resumen-valor">{{ format_cop(cierre.promedio_diario_cop) }}</span>
+        </div>
+        <div class="fila-resumen">
+          <span class="resumen-etiqueta">Reemplazos registrados:</span>
+          <span class="resumen-valor">
+            {{ cierre.reemplazos_n }}{% if cierre.reemplazos_nota %} ({{ cierre.reemplazos_nota }}){% endif %}
+          </span>
+        </div>
+        <div class="fila-resumen">
+          <span class="resumen-etiqueta">Pruebas gratuitas iniciadas:</span>
+          <span class="resumen-valor">
+            {{ cierre.pruebas_n }}{% if cierre.pruebas_detalle %} ({{ cierre.pruebas_detalle }}){% endif %}
+          </span>
+        </div>
+
+        <div class="linea-separadora"></div>
+
+        <div class="nota-integridad">
+          <strong>Nota de integridad contable:</strong> cada cobro está atribuido
+          a una sesión autenticada con marca de tiempo UTC inmutable del
+          servidor. Los {{ cierre.dias_n }} día{{ 's' if cierre.dias_n != 1 else '' }}
+          del mes se usan como divisor del promedio diario.
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

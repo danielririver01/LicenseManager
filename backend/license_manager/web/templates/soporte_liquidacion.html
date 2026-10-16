@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block titulo %}Soporte de liquidación · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  <div class="acciones-cabecera" style="margin-bottom:16px">
+    <a class="btn btn-secundario" href="/liquidaciones?periodo={{ fila.periodo.strftime('%Y-%m') }}">&larr; Volver a liquidaciones</a>
+    <button type="button" class="btn btn-primario" data-imprimir>&#128424; Imprimir soporte</button>
+  </div>
+
+  <!-- Documento imprimible: lm.js dispara window.print(), sin script inline. -->
+  <div class="tarjeta soporte" data-soporte>
+    <div class="soporte-cabecera">
+      <div>
+        <div class="soporte-marca">FRUBBER &middot; License Manager</div>
+        <h1 class="soporte-titulo">Soporte de Liquidación de Comisiones</h1>
+      </div>
+      <span class="badge badge-{{ fila.estado_tono }}">{{ fila.estado_etiqueta }}</span>
+    </div>
+
+    <div class="soporte-cuerpo">
+      <div class="par">
+        <span class="par-etiqueta">Periodo</span>
+        <span class="par-valor">{{ etiqueta }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Beneficiario</span>
+        <span class="par-valor">{{ fila.beneficiario_nombre }} &middot; {{ fila.beneficiario_email }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Licencias cobradas</span>
+        <span class="par-valor">{{ fila.licencias }} licencia{{ 's' if fila.licencias != 1 else '' }} × {{ format_cop(fila.precio_unitario_cop) }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Total facturado (bruto)</span>
+        <span class="par-valor">{{ format_cop(fila.monto_bruto_cop) }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Comisión acordada</span>
+        <span class="par-valor">{{ etiqueta_comision(fila.tipo, fila.valor) }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Comisión a pagar</span>
+        <span class="par-valor" style="color:var(--verde-activo)">{{ format_cop(fila.comision_cop) }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Ganancia neta de la sociedad</span>
+        <span class="par-valor" style="color:var(--azul-electrico)">{{ format_cop(fila.ganancia_neta_cop) }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Canal de pago</span>
+        <span class="par-valor">{{ fila.metodo_etiqueta if fila.pagado else 'Aún no registrado' }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Comprobante</span>
+        <span class="par-valor">{{ fila.comprobante if fila.comprobante else '—' }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Confirmado por</span>
+        <span class="par-valor">{{ fila.confirmado_por if fila.confirmado_por else '—' }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Fecha de sellado</span>
+        <span class="par-valor">
+          {{ fila.pagado_at.strftime('%d/%m/%Y %H:%M UTC') if fila.pagado_at else 'Liquidación aún no sellada' }}
+        </span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Identificador</span>
+        <span class="par-valor id-corto">{{ fila.id }}</span>
+      </div>
+    </div>
+
+    <div class="nota-integridad">
+      <strong>Este soporte refleja el estado registrado en la auditoría
+      encadenada del sistema.</strong> La liquidación {{ 'fue sellada' if fila.pagado else 'está pendiente de pago' }}
+      por la sociedad de co-titulares; {{ 'sus importes ya no admiten cambios.' if fila.pagado else 'sus importes pueden recalcularse hasta sellarla.' }}
+    </div>
+
+    <div class="soporte-firmas">
+      <div class="firma">
+        <div class="firma-linea"></div>
+        <span>Titular que liquida</span>
+      </div>
+      <div class="firma">
+        <div class="firma-linea"></div>
+        <span>Operador beneficiario</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

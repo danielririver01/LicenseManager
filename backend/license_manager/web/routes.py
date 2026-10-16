@@ -12,12 +12,12 @@ publica, que de por si es publica.
 
 from __future__ import annotations
 
-from datetime import UTC
+from datetime import UTC, date
 from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -38,6 +38,11 @@ from license_manager.security.passwords import (
 )
 from license_manager.security.sessions import SessionManager
 from license_manager.services.audit import record_event
+from license_manager.services.cierres import (
+    exportar_cierre_csv,
+    format_millones,
+    resumen_cierre,
+)
 from license_manager.services.directory import (
     DirectoryError,
     create_customer,
@@ -79,6 +84,28 @@ from license_manager.services.licencias import (
     parse_importe_cop,
     preparar_equipo_para_emision,
     tipo_emision_por,
+)
+from license_manager.services.liquidaciones import (
+    CANALES_PAGO_ETIQUETA,
+    TIPOS_COMISION,
+    LiquidacionError,
+    confirmar_pago,
+    etiqueta_comision,
+    liquidacion_de,
+    liquidacion_etiqueta,
+    liquidacion_fila,
+    listar_liquidaciones,
+    registrar_liquidacion,
+    ventas_del_periodo,
+)
+from license_manager.services.periodos import (
+    PeriodoError,
+    clave_periodo,
+    etiqueta_periodo,
+    mes_actual,
+    parse_periodo,
+    periodo_anterior,
+    periodo_siguiente,
 )
 from license_manager.services.users import (
     UserManagementError,
@@ -1279,4 +1306,334 @@ def ingresos_cambiar_cuenta(
         "/ingresos",
         aviso=f"Cuenta actualizada: {etiqueta.split(' — ')[0]}. "
         "El cronometro quedo congelado donde corresponde.",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Cierres mensuales (UI-07B, JHO-103)
+# --------------------------------------------------------------------------- #
+#
+# UI-07B es la lectura consolidada de lo que ya paso en UI-07: los tres roles
+# la consultan (doc 01, LM-RF-002), pero nadie digita fechas: el mes llega en
+# ``?periodo=AAAA-MM`` o se toma el mes en curso. La exportacion deja su
+# evento de auditoria como cualquier otra accion de negocio.
+
+
+def _periodo_valido(texto: str | None, destino: str) -> tuple[date | None, RedirectResponse | None]:
+    """Mes elegido por el operador, con el mes en curso como respaldo."""
+    if not texto:
+        return mes_actual(), None
+    try:
+        return parse_periodo(texto), None
+    except PeriodoError as exc:
+        return None, _volver(destino, error=str(exc))
+
+
+@pages_router.get("/cierres", response_class=HTMLResponse)
+def cierres_page(request: Request, db: Session = Depends(get_db_session), periodo: str = ""):
+    """UI-07B · desglose mensual, comparativo semestral y cierre contable."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    mes, rechazo = _periodo_valido(periodo, "/cierres")
+    if rechazo:
+        return rechazo
+
+    cierre = resumen_cierre(db, periodo=mes)
+    return _render(
+        request,
+        "cierres.html",
+        {
+            "seccion": "cierres",
+            "cierre": cierre,
+            "etiqueta": etiqueta_periodo(mes),
+            "periodo_actual": clave_periodo(mes),
+            "periodo_anterior": clave_periodo(periodo_anterior(mes)),
+            "periodo_siguiente": clave_periodo(periodo_siguiente(mes)),
+            "aviso": request.query_params.get("aviso"),
+            "error": request.query_params.get("error"),
+            "format_cop": format_cop,
+            "format_hardware_code": format_hardware_code,
+            "format_millones": format_millones,
+            "precio_venta": PRECIO_VENTA_COP,
+        },
+    )
+
+
+@pages_router.get("/cierres/exportar")
+def cierres_exportar(request: Request, db: Session = Depends(get_db_session), periodo: str = ""):
+    """UI-07B · descarga del cierre en CSV con BOM UTF-8 (Excel es-CO)."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    mes, rechazo = _periodo_valido(periodo, "/cierres")
+    if rechazo:
+        return rechazo
+
+    cierre = resumen_cierre(db, periodo=mes)
+    record_event(
+        db,
+        action="cierre.exportado",
+        user=user,
+        entity_type="periodo",
+        entity_id=cierre.clave,
+        # Nada sensible: solo las cifras del mes que salen del sistema.
+        detail={
+            "periodo": cierre.clave,
+            "total_cop": cierre.total_cop,
+            "licencias_n": cierre.licencias_n,
+            "movimientos_n": len(cierre.movimientos),
+        },
+    )
+    db.commit()
+
+    nombre = f"cierre-mensual-{cierre.clave}.csv"
+    return Response(
+        content=exportar_cierre_csv(cierre),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Liquidacion y reparto de utilidades (UI-11, JHO-103) - exclusivo de Titulares
+# --------------------------------------------------------------------------- #
+#
+# Igual que en UI-09, el bloqueo es estricto y visible: el administrador
+# delegado ve la tarjeta de acceso restringido con estado 403, no una lista
+# vacia ni un redirect que oculte la pantalla.
+
+
+def _liquidaciones_denegado(request: Request):
+    return _render(
+        request,
+        "liquidaciones.html",
+        {"acceso_denegado": True, "filas": [], "aviso": None, "error": None},
+        status_code=403,
+    )
+
+
+def _liquidaciones_destino(periodo: date, **extras: str) -> str:
+    """URL de vuelta a /liquidaciones conservando el mes y los avisos."""
+    destino = f"/liquidaciones?periodo={clave_periodo(periodo)}"
+    pares = [f"{clave}={quote(valor, safe='')}" for clave, valor in extras.items() if valor]
+    return f"{destino}&{'&'.join(pares)}" if pares else destino
+
+
+@pages_router.get("/liquidaciones", response_class=HTMLResponse)
+def liquidaciones_page(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    periodo: str = "",
+    pago: str = "",
+):
+    """UI-11 · calculadora, estado del periodo y modal de pago de comisiones."""
+    user = get_current_user(request, db)
+    request.state.user = user
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+
+    if not Role(user.rol).is_titular:
+        return _liquidaciones_denegado(request)
+
+    mes, rechazo = _periodo_valido(periodo, "/liquidaciones")
+    if rechazo:
+        return rechazo
+
+    # Ventas del mes por persona: alimentan el prellenado de la calculadora.
+    ventas = ventas_del_periodo(db, periodo=mes)
+    candidatos = []
+    for fila in ventas:
+        cuenta = db.get(User, fila.usuario_id)
+        candidatos.append(
+            {
+                "id": fila.usuario_id,
+                "nombre": cuenta.nombre_completo if cuenta else "Cuenta eliminada",
+                "licencias": fila.licencias_n,
+                "monto_cop": fila.monto_cop,
+            }
+        )
+
+    filas = listar_liquidaciones(db, periodo=mes)
+    modal_pago = next((fila for fila in filas if fila.id == pago), None)
+
+    return _render(
+        request,
+        "liquidaciones.html",
+        {
+            "seccion": "liquidaciones",
+            "acceso_denegado": False,
+            "filas": filas,
+            "candidatos": candidatos,
+            "tipos_comision": TIPOS_COMISION,
+            "canales_pago": CANALES_PAGO_ETIQUETA,
+            "etiqueta": etiqueta_periodo(mes),
+            "periodo_actual": clave_periodo(mes),
+            "periodo_anterior": clave_periodo(periodo_anterior(mes)),
+            "periodo_siguiente": clave_periodo(periodo_siguiente(mes)),
+            # Liquidacion cuyo modal de pago hay que reabrir tras un rechazo
+            # o tras el alta ("Aplicar y Pagar").
+            "modal_pago": modal_pago,
+            "aviso": request.query_params.get("aviso"),
+            "error": request.query_params.get("error"),
+            "format_cop": format_cop,
+            "etiqueta_comision": etiqueta_comision,
+            "precio_venta": PRECIO_VENTA_COP,
+        },
+    )
+
+
+@pages_router.post("/liquidaciones")
+def liquidaciones_registrar(
+    request: Request,
+    periodo: str = Form(""),
+    administrador_id: str = Form(""),
+    licencias: str = Form(""),
+    tipo: str = Form(""),
+    valor: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-11 · crea o recalcula la liquidacion pendiente del mes."""
+    user = get_current_user(request, db)
+    request.state.user = user
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not Role(user.rol).is_titular:
+        return _liquidaciones_denegado(request)
+
+    mes, rechazo = _periodo_valido(periodo, "/liquidaciones")
+    if rechazo:
+        return rechazo
+    destino = _liquidaciones_destino(mes)
+
+    try:
+        liquidacion, accion = registrar_liquidacion(
+            db,
+            actor_id=user.id,
+            periodo=mes,
+            administrador_id=administrador_id,
+            licencias=licencias,
+            tipo=tipo,
+            valor=valor,
+        )
+    except LiquidacionError as exc:
+        db.rollback()
+        return _volver(destino, error=str(exc))
+
+    record_event(
+        db,
+        action=f"liquidacion.{accion}",
+        user=user,
+        entity_type="liquidacion",
+        entity_id=liquidacion.id,
+        # Datos contables puros: ni el canal ni el comprobante existen aun.
+        detail={
+            "periodo": clave_periodo(liquidacion.periodo),
+            "beneficiario_id": liquidacion.administrador_id,
+            "licencias": int(liquidacion.licencias_vendidas),
+            "tipo_comision": liquidacion.tipo_comision,
+            "valor_comision": int(liquidacion.valor_comision),
+            "monto_bruto_cop": int(liquidacion.monto_bruto_cop),
+            "comision_cop": int(liquidacion.comision_cop),
+            "ganancia_neta_cop": int(liquidacion.ganancia_neta_cop),
+        },
+    )
+    db.commit()
+
+    etiqueta = liquidacion_etiqueta(db, liquidacion)
+    return _volver(
+        _liquidaciones_destino(mes, pago=liquidacion.id),
+        aviso=(
+            f"Liquidacion creada: {etiqueta}."
+            if accion == "creada"
+            else f"Liquidacion recalculada: {etiqueta}."
+        ),
+    )
+
+
+@pages_router.post("/liquidaciones/{liquidacion_id}/pago")
+def liquidaciones_pagar(
+    request: Request,
+    liquidacion_id: str,
+    metodo: str = Form(""),
+    comprobante: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-11 · confirma el pago y sella la liquidacion para siempre."""
+    user = get_current_user(request, db)
+    request.state.user = user
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not Role(user.rol).is_titular:
+        return _liquidaciones_denegado(request)
+
+    liquidacion = liquidacion_de(db, liquidacion_id)
+    if liquidacion is None:
+        return _volver("/liquidaciones", error="La liquidacion indicada no existe.")
+
+    destino = _liquidaciones_destino(liquidacion.periodo)
+    try:
+        confirmar_pago(
+            db,
+            liquidacion=liquidacion,
+            actor_id=user.id,
+            metodo=metodo,
+            comprobante=comprobante,
+        )
+    except LiquidacionError as exc:
+        db.rollback()
+        # El modal se reabre con la fila pendiente para corregir el dato.
+        return _volver(_liquidaciones_destino(liquidacion.periodo, pago=liquidacion.id), error=str(exc))
+
+    record_event(
+        db,
+        action="liquidacion.pagada",
+        user=user,
+        entity_type="liquidacion",
+        entity_id=liquidacion.id,
+        detail={
+            "periodo": clave_periodo(liquidacion.periodo),
+            "beneficiario_id": liquidacion.administrador_id,
+            "comision_cop": int(liquidacion.comision_cop),
+            "metodo_pago": liquidacion.metodo_pago,
+            "comprobante": liquidacion.nota,
+        },
+    )
+    db.commit()
+
+    etiqueta = liquidacion_etiqueta(db, liquidacion)
+    return _volver(
+        destino,
+        aviso=f"Pago de comision registrado y liquidacion sellada: {etiqueta}.",
+    )
+
+
+@pages_router.get("/liquidaciones/{liquidacion_id}/soporte", response_class=HTMLResponse)
+def liquidaciones_soporte(
+    request: Request, liquidacion_id: str, db: Session = Depends(get_db_session)
+):
+    """UI-11 · soporte imprimible de una liquidacion (sellada o pendiente)."""
+    user = get_current_user(request, db)
+    request.state.user = user
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not Role(user.rol).is_titular:
+        return _liquidaciones_denegado(request)
+
+    fila = liquidacion_fila(db, liquidacion_id)
+    if fila is None:
+        return _volver("/liquidaciones", error="La liquidacion indicada no existe.")
+
+    return _render(
+        request,
+        "soporte_liquidacion.html",
+        {
+            "seccion": "liquidaciones",
+            "fila": fila,
+            "etiqueta": etiqueta_periodo(fila.periodo),
+            "format_cop": format_cop,
+            "etiqueta_comision": etiqueta_comision,
+        },
     )

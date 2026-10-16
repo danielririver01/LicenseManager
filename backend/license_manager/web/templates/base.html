@@ -31,8 +31,10 @@
       <li><a href="/clientes" class="{{ 'activo' if seccion == 'clientes' else '' }}">Clientes</a></li>
       <li><a href="/equipos" class="{{ 'activo' if seccion == 'equipos' else '' }}">Equipos y licencias</a></li>
       <li><a href="/ingresos" class="{{ 'activo' if seccion == 'ingresos' else '' }}">Ingresos</a></li>
+      <li><a href="/cierres" class="{{ 'activo' if seccion == 'cierres' else '' }}">Cierres mensuales</a></li>
       <li><a href="#" class="{{ 'activo' if seccion == 'historial' else '' }}">Historial</a></li>
       {% if current_user.rol in ('owner', 'coowner') %}
+      <li><a href="/liquidaciones" class="{{ 'activo' if seccion == 'liquidaciones' else '' }}">Liquidación</a></li>
       <li><a href="/administradores" class="{{ 'activo' if seccion == 'administradores' else '' }}">Administradores</a></li>
       {% endif %}
     </ul>

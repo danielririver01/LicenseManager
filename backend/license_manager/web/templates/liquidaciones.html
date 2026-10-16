@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block titulo %}Liquidación de utilidades · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  {% if acceso_denegado %}
+  <div class="tarjeta acceso-restringido">
+    <div class="icono">&#128274;</div>
+    <h1 class="titulo" style="font-size:18px">Acceso restringido &mdash; Error 403</h1>
+    <p class="subtitulo" style="max-width:460px;margin:8px auto 0">
+      La liquidación y el reparto de utilidades es de uso exclusivo de los
+      Titulares de la sociedad (Titular Principal y Co-Titular). Los
+      administradores delegados no pueden ver ni gestionar comisiones.
+    </p>
+    <p style="margin-top:22px"><a class="btn btn-secundario" href="/">Volver al panel</a></p>
+  </div>
+
+  {% else %}
+  <div class="encabezado-pantalla">
+    <div>
+      <h1 class="titulo">Calculadora y Liquidación de Comisiones</h1>
+      <p class="subtitulo">
+        Calcula el reparto de ventas de cada operador por porcentaje o valor
+        fijo en COP, registra el pago con su comprobante y sella la
+        liquidación. Todo queda en la auditoría de la sociedad.
+      </p>
+    </div>
+
+    <div class="selector-mes">
+      <a class="mes-flecha" href="/liquidaciones?periodo={{ periodo_anterior }}" aria-label="Mes anterior">&lsaquo;</a>
+      <span class="mes-actual">{{ etiqueta }}</span>
+      <a class="mes-flecha" href="/liquidaciones?periodo={{ periodo_siguiente }}" aria-label="Mes siguiente">&rsaquo;</a>
+    </div>
+  </div>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  <!-- Formulario de cálculo y reparto de ventas (mockup UI-11) -->
+  <div class="tarjeta calculadora">
+    <div class="calc-cabecera">
+      <h2 style="margin-bottom:0">&#129518; Formulario de cálculo y reparto de ventas</h2>
+      <span class="pista" style="margin-top:0">Tarifa base: {{ format_cop(precio_venta) }} por licencia</span>
+    </div>
+
+    <form method="post" action="/liquidaciones" data-form-liquidacion data-precio-venta="{{ precio_venta }}">
+      <input type="hidden" name="periodo" value="{{ periodo_actual }}">
+
+      <div class="form-grid calc-campos">
+        <div class="campo">
+          <label for="calc_admin">1. Administrador</label>
+          <select id="calc_admin" name="administrador_id" required data-calc-admin>
+            <option value="">— Elige el operador —</option>
+            {% for persona in candidatos %}
+            <option value="{{ persona.id }}"
+                    data-licencias="{{ persona.licencias }}"
+                    data-monto="{{ persona.monto_cop }}">
+              {{ persona.nombre }} ({{ persona.licencias }} venta{{ 's' if persona.licencias != 1 else '' }} registrada{{ 's' if persona.licencias != 1 else '' }} este mes)
+            </option>
+            {% endfor %}
+            {% if not candidatos %}
+            <option value="" disabled>Nadie ha cobrado licencias este mes</option>
+            {% endif %}
+          </select>
+          <p class="pista">
+            La lista viene de quien registró cobros en {{ etiqueta }}. El Titular
+            puede liquidar a cualquier operador aunque no aparezca aquí.
+          </p>
+        </div>
+
+        <div class="campo">
+          <label for="calc_licencias">2. Licencias cobradas</label>
+          <input type="text" id="calc_licencias" name="licencias" inputmode="numeric"
+                 value="1" required data-calc-licencias>
+          <p class="pista">Cantidad entera, al menos una licencia cobrada.</p>
+        </div>
+
+        <div class="campo">
+          <label for="calc_tipo">3. Tipo de comisión</label>
+          <select id="calc_tipo" name="tipo" required data-calc-tipo>
+            {% for valor, etiqueta_tipo in tipos_comision %}
+            <option value="{{ valor }}">{{ etiqueta_tipo }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="campo">
+          <label for="calc_valor" data-calc-etiqueta>4. Porcentaje de comisión (%)</label>
+          <input type="text" id="calc_valor" name="valor" inputmode="numeric"
+                 value="30" required data-calc-valor>
+          <p class="pista" data-calc-pista>Entero entre 1 y 100. Se redondea al peso.</p>
+        </div>
+      </div>
+
+      <!-- Desglose en tiempo real (lo pinta lm.js, nunca un script inline) -->
+      <div class="desglose-calculo">
+        <div class="item-desglose">
+          <span class="desglose-etiqueta">Total recaudado de verdulerías</span>
+          <span class="desglose-valor" data-res-bruto>{{ format_cop(precio_venta) }}</span>
+          <span class="pista" style="margin-top:0" data-res-bruto-detalle>1 licencia × {{ format_cop(precio_venta) }}</span>
+        </div>
+        <div class="item-desglose">
+          <span class="desglose-etiqueta" style="color:var(--verde-activo)">Comisión del operador</span>
+          <span class="desglose-valor" style="color:var(--verde-activo)" data-res-comision>{{ format_cop(135000) }}</span>
+          <span class="pista" style="margin-top:0" data-res-comision-detalle>30% ({{ format_cop(135000) }} c/u)</span>
+        </div>
+        <div class="item-desglose">
+          <span class="desglose-etiqueta" style="color:var(--azul-electrico)">Ganancia neta de la sociedad</span>
+          <span class="desglose-valor" style="color:var(--azul-electrico)" data-res-neta>{{ format_cop(315000) }}</span>
+          <span class="pista" style="margin-top:0" data-res-neta-detalle>Retenido para la sociedad</span>
+        </div>
+        <div class="item-desglose item-desglose-accion">
+          <button type="submit" class="btn btn-primario btn-ancho"
+                  data-confirmar="Aplicar el cálculo y abrir el registro de pago? La liquidación queda pendiente hasta sellarla.">
+            Aplicar y Pagar Comisión &rarr;
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Estado de liquidación del periodo -->
+  <div class="tabla-envoltura" style="margin-top:20px">
+    <div class="tabla-titulo">
+      <h2>Estado de liquidación del periodo ({{ etiqueta }})</h2>
+      <span class="cuenta-filas">Pagos manuales con comprobante</span>
+    </div>
+    <div class="tabla-scroll">
+      <table class="tabla-operadores tabla-liquidaciones">
+        <thead>
+          <tr>
+            <th>Administrador</th>
+            <th>Ventas realizadas</th>
+            <th>Total facturado</th>
+            <th>Comisión acordada</th>
+            <th>Comisión a pagar</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fila in filas %}
+          <tr>
+            <td>
+              <div class="fila-nombre">{{ fila.beneficiario_nombre }}</div>
+              <div class="fila-sub">{{ fila.beneficiario_email }}</div>
+            </td>
+            <td>{{ fila.licencias }} licencia{{ 's' if fila.licencias != 1 else '' }}</td>
+            <td><span class="monto-cop">{{ format_cop(fila.monto_bruto_cop) }}</span>
+              <div class="fila-sub">{{ format_cop(fila.precio_unitario_cop) }} c/u</div>
+            </td>
+            <td>{{ fila.comision_acordada }}</td>
+            <td><strong style="font-size:14px;color:var(--azul-noche)" class="monto-cop">{{ format_cop(fila.comision_cop) }}</strong></td>
+            <td>
+              <span class="badge badge-{{ fila.estado_tono }}">{{ fila.estado_etiqueta }}</span>
+              {% if fila.pagado %}
+              <div class="fila-sub">
+                {{ fila.metodo_etiqueta }} · {{ fila.comprobante }}
+                {% if fila.confirmado_por %}<br>Confirmado por {{ fila.confirmado_por }}{% endif %}
+              </div>
+              {% endif %}
+            </td>
+            <td>
+              {% if fila.pagado %}
+              <a class="btn-limpio" href="/liquidaciones/{{ fila.id }}/soporte">Soporte &#128424;</a>
+              {% else %}
+              <button type="button" class="btn-fila activo" data-abrir-pago
+                      data-liquidacion="{{ fila.id }}"
+                      data-accion="/liquidaciones/{{ fila.id }}/pago"
+                      data-beneficiario="{{ fila.beneficiario_nombre }}"
+                      data-comision="{{ format_cop(fila.comision_cop) }}">
+                Registrar pago
+              </button>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" style="padding:36px;text-align:center;color:var(--text-muted)">
+              {% if candidatos %}
+              Todavía no se ha registrado ninguna liquidación para {{ etiqueta }}.
+              Usa el formulario de arriba para abrir la primera.
+              {% else %}
+              Nadie registró cobros de licencias en {{ etiqueta }}: no hay
+              comisiones que liquidar en este periodo.
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="aviso-reglas" style="margin-top:20px">
+    <strong>Reglas de la liquidación:</strong> el bruto es
+    licencias × {{ format_cop(precio_venta) }}; la comisión nunca puede
+    superar el bruto; una liquidación pagada queda SELLADA (sus importes no se
+    tocan más) y cualquier ajuste se registra en el periodo siguiente. La
+    liquidación es una salida de dinero de la sociedad, por eso no aparece
+    como ingreso en el cierre mensual.
+  </div>
+
+  <!-- Modal "Registrar Pago de Comisión": se abre desde lm.js. El servidor
+       solo lo deja visible cuando hay que reabrirlo (tras un rechazo o tras
+       "Aplicar y Pagar"). -->
+  <div class="modal-cuenta {{ 'oculto' if not modal_pago }}"
+       data-modal-pago
+       {% if modal_pago %}data-reabrir="1"{% endif %}>
+    <div class="modal-caja">
+      <div class="modal-cabecera">
+        <h2>Registrar Pago de Comisión</h2>
+        <button type="button" class="modal-cerrar" data-cerrar-pago aria-label="Cerrar">✕</button>
+      </div>
+
+      <form method="post" class="form-cuenta"
+            {% if modal_pago %}action="/liquidaciones/{{ modal_pago.id }}/pago"{% endif %}
+            data-form-pago>
+        <div class="campo">
+          <label for="pago_operador">Operador</label>
+          <input type="text" id="pago_operador" readonly
+                 value="{{ modal_pago.beneficiario_nombre if modal_pago else '' }}"
+                 data-campo-operador style="background:var(--blanco-frio)">
+        </div>
+        <div class="campo">
+          <label for="pago_monto">Monto liquidado a pagar (COP)</label>
+          <input type="text" id="pago_monto" readonly
+                 value="{{ format_cop(modal_pago.comision_cop) if modal_pago else '' }}"
+                 data-campo-monto style="background:var(--blanco-frio);font-weight:700;color:var(--verde-activo)">
+          <p class="pista">Se sella exactamente este importe, en pesos enteros.</p>
+        </div>
+        <div class="campo">
+          <label for="pago_metodo">Canal de pago *</label>
+          <select id="pago_metodo" name="metodo" required data-campo-metodo>
+            <option value="">— Elige el canal —</option>
+            {% for valor, etiqueta_canal in canales_pago %}
+            <option value="{{ valor }}">{{ etiqueta_canal }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="pago_comprobante">Comprobante / referencia de pago *</label>
+          <input type="text" id="pago_comprobante" name="comprobante" maxlength="120"
+                 required placeholder="Ej. Nequi #849201" data-campo-comprobante>
+          <p class="pista">Obligatorio: es la prueba del pago que sella la liquidación.</p>
+        </div>
+        <div class="modal-acciones">
+          <button type="button" class="btn btn-secundario" data-cerrar-pago>Cancelar</button>
+          <button type="submit" class="btn btn-primario"
+                  data-confirmar="¿Sellar la liquidación con este pago? Una vez sellada, sus importes no se pueden modificar.">
+            Sellar Liquidación
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}

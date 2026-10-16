@@ -319,6 +319,222 @@
     });
   }
 
+  /* --------------------------------------------------------------------- *
+   * Liquidación de utilidades (UI-11, JHO-103).
+   *
+   * Tres comportamientos, todos sin script inline (CSP script-src 'self'):
+   * la calculadora en vivo, el modal "Registrar Pago de Comisión" y el
+   * botón de imprimir el soporte.
+   * --------------------------------------------------------------------- */
+
+  /* La aritmética replica la del servidor: pesos enteros, porcentaje
+   * redondeado al peso más cercano con `(bruto*valor + 50) // 100`. */
+  function calculoLicencias(texto) {
+    var limpio = String(texto || "").replace(/[^0-9]/g, "");
+    return limpio ? parseInt(limpio, 10) : 0;
+  }
+
+  function calculoValor(texto) {
+    var limpio = String(texto || "").replace(/[^0-9]/g, "");
+    return limpio ? parseInt(limpio, 10) : 0;
+  }
+
+  function prepararCalculadora() {
+    var formulario = document.querySelector("[data-form-liquidacion]");
+    if (!formulario) {
+      return;
+    }
+
+    var precio = parseInt(formulario.getAttribute("data-precio-venta") || "450000", 10);
+    var campoLicencias = formulario.querySelector("[data-calc-licencias]");
+    var campoTipo = formulario.querySelector("[data-calc-tipo]");
+    var campoValor = formulario.querySelector("[data-calc-valor]");
+    var etiquetaValor = formulario.querySelector("[data-calc-etiqueta]");
+    var pistaValor = formulario.querySelector("[data-calc-pista]");
+    var selectorAdmin = formulario.querySelector("[data-calc-admin]");
+    var resBruto = document.querySelector("[data-res-bruto]");
+    var resBrutoDetalle = document.querySelector("[data-res-bruto-detalle]");
+    var resComision = document.querySelector("[data-res-comision]");
+    var resComisionDetalle = document.querySelector("[data-res-comision-detalle]");
+    var resNeta = document.querySelector("[data-res-neta]");
+    var resNetaDetalle = document.querySelector("[data-res-neta-detalle]");
+
+    function formatoCop(monto) {
+      return "$" + monto.toLocaleString("es-CO") + " COP";
+    }
+
+    function pintar() {
+      var licencias = calculoLicencias(campoLicencias ? campoLicencias.value : "");
+      var tipo = campoTipo ? campoTipo.value : "porcentaje";
+      var valor = calculoValor(campoValor ? campoValor.value : "");
+      var bruto = licencias * precio;
+      var comision = 0;
+
+      if (tipo === "porcentaje") {
+        if (etiquetaValor) {
+          etiquetaValor.textContent = "4. Porcentaje de comisión (%)";
+        }
+        if (pistaValor) {
+          pistaValor.textContent = "Entero entre 1 y 100. Se redondea al peso.";
+        }
+        comision = valor > 0 ? Math.floor((bruto * valor + 50) / 100) : 0;
+        if (resComisionDetalle) {
+          resComisionDetalle.textContent =
+            valor + "% (" + formatoCop(licencias > 0 ? Math.floor(comision / licencias) : 0) + " c/u)";
+        }
+      } else {
+        if (etiquetaValor) {
+          etiquetaValor.textContent = "4. Valor fijo en pesos ($ COP)";
+        }
+        if (pistaValor) {
+          pistaValor.textContent = "Entero en pesos por licencia, sin centavos.";
+        }
+        comision = licencias * valor;
+        if (resComisionDetalle) {
+          resComisionDetalle.textContent = formatoCop(valor) + " fijo por licencia";
+        }
+      }
+
+      // Una comisión mayor que el bruto es un error de digitación: se avisa
+      // en vivo y el servidor la rechaza igual.
+      var excede = comision > bruto;
+      if (resBruto) {
+        resBruto.textContent = formatoCop(bruto);
+      }
+      if (resBrutoDetalle) {
+        resBrutoDetalle.textContent = licencias + " licencia" + (licencias === 1 ? "" : "s") +
+          " × " + formatoCop(precio);
+      }
+      if (resComision) {
+        resComision.textContent = formatoCop(comision);
+        resComision.style.color = excede ? "var(--rojo-peligro)" : "var(--verde-activo)";
+      }
+      if (resNeta) {
+        resNeta.textContent = formatoCop(bruto - comision);
+        resNetaDetalle.textContent = excede
+          ? "La comisión no puede superar el total recaudado."
+          : "Retenido para la sociedad";
+      }
+    }
+
+    // Al elegir una persona se precarga lo que cobró en el mes.
+    if (selectorAdmin) {
+      selectorAdmin.addEventListener("change", function () {
+        var opcion = selectorAdmin.options[selectorAdmin.selectedIndex];
+        var licencias = opcion ? opcion.getAttribute("data-licencias") : null;
+        if (campoLicencias && licencias && parseInt(licencias, 10) > 0) {
+          campoLicencias.value = licencias;
+        }
+        pintar();
+      });
+    }
+
+    [campoLicencias, campoTipo, campoValor].forEach(function (campo) {
+      if (campo) {
+        campo.addEventListener("input", pintar);
+        campo.addEventListener("change", pintar);
+      }
+    });
+
+    // Los campos se envían limpios: solo dígitos, igual que en el servidor.
+    formulario.addEventListener("submit", function (evento) {
+      var valorTipo = campoTipo ? campoTipo.value : "porcentaje";
+      var permitido = valorTipo === "porcentaje" ? /^(100|[1-9][0-9]?)$/ : /^[1-9][0-9]*$/;
+      if (campoLicencias && !/^[1-9][0-9]*$/.test(String(campoLicencias.value || "").trim())) {
+        evento.preventDefault();
+        window.alert("La cantidad de licencias debe ser un número entero de 1 en adelante.");
+        campoLicencias.focus();
+        return;
+      }
+      if (campoValor && !permitido.test(String(campoValor.value || "").trim())) {
+        evento.preventDefault();
+        window.alert(
+          valorTipo === "porcentaje"
+            ? "El porcentaje de comisión debe ser un número entero entre 1 y 100."
+            : "El valor fijo de la comisión debe ser un número entero en pesos, mayor que cero."
+        );
+        campoValor.focus();
+      }
+    });
+
+    pintar();
+  }
+
+  function prepararModalPago() {
+    var modal = document.querySelector("[data-modal-pago]");
+    if (!modal) {
+      return;
+    }
+
+    var formulario = modal.querySelector("[data-form-pago]");
+    var campoOperador = modal.querySelector("[data-campo-operador]");
+    var campoMonto = modal.querySelector("[data-campo-monto]");
+    var campoMetodo = modal.querySelector("[data-campo-metodo]");
+    var campoComprobante = modal.querySelector("[data-campo-comprobante]");
+
+    function abrir(datos) {
+      if (formulario && datos.accion) {
+        formulario.setAttribute("action", datos.accion);
+      }
+      if (campoOperador) {
+        campoOperador.value = datos.beneficiario || "";
+      }
+      if (campoMonto) {
+        campoMonto.value = datos.comision || "";
+      }
+      if (campoMetodo) {
+        campoMetodo.value = "";
+      }
+      if (campoComprobante) {
+        campoComprobante.value = "";
+      }
+      modal.classList.remove("oculto");
+      if (campoMetodo) {
+        campoMetodo.focus();
+      }
+    }
+
+    function cerrar() {
+      modal.classList.add("oculto");
+    }
+
+    var botonesAbrir = document.querySelectorAll("[data-abrir-pago]");
+    Array.prototype.forEach.call(botonesAbrir, function (boton) {
+      boton.addEventListener("click", function () {
+        abrir({
+          accion: boton.getAttribute("data-accion"),
+          beneficiario: boton.getAttribute("data-beneficiario"),
+          comision: boton.getAttribute("data-comision"),
+        });
+      });
+    });
+
+    var botonesCerrar = modal.querySelectorAll("[data-cerrar-pago]");
+    Array.prototype.forEach.call(botonesCerrar, function (boton) {
+      boton.addEventListener("click", cerrar);
+    });
+
+    document.addEventListener("keydown", function (evento) {
+      if (evento.key === "Escape" && !modal.classList.contains("oculto")) {
+        cerrar();
+      }
+    });
+
+    // Reabrir el modal tras un rechazo o tras "Aplicar y Pagar".
+    if (modal.getAttribute("data-reabrir")) {
+      modal.classList.remove("oculto");
+    }
+  }
+
+  function prepararImpresion() {
+    var botones = document.querySelectorAll("[data-imprimir]");
+    Array.prototype.forEach.call(botones, function (boton) {
+      boton.addEventListener("click", function () {
+        window.print();
+      });
+    });
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
       prepararBotones();
@@ -326,6 +542,9 @@
       prepararConfirmaciones();
       prepararModalCuentas();
       prepararImportes();
+      prepararCalculadora();
+      prepararModalPago();
+      prepararImpresion();
     });
   } else {
     prepararBotones();
@@ -333,5 +552,8 @@
     prepararConfirmaciones();
     prepararModalCuentas();
     prepararImportes();
+    prepararCalculadora();
+    prepararModalPago();
+    prepararImpresion();
   }
 })();
