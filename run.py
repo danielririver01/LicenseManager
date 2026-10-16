@@ -13,8 +13,8 @@ en cualquier sistema. Las variables de entorno que ya esten puestas se
 respetan: este archivo solo rellena lo que falte.
 
     --puerto 8899     puerto (por defecto 8899)
-    --recarga         reinicia solo al guardar cambios (para desarrollar)
-    --sin-navegador   no abre el navegador
+    --sin-recarga     no reiniciar al guardar cambios
+    --sin-navegador   no abrir el navegador
 """
 
 from __future__ import annotations
@@ -64,7 +64,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Arranca License Manager en local.")
     parser.add_argument("--puerto", type=int, default=int(os.environ.get("LM_PUERTO", "8899")))
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--recarga", action="store_true", help="recargar al guardar cambios")
+    parser.add_argument(
+        "--sin-recarga",
+        action="store_true",
+        help="desactiva el reinicio automatico al guardar cambios",
+    )
     parser.add_argument("--sin-navegador", action="store_true")
     args = parser.parse_args()
 
@@ -99,7 +103,9 @@ def main() -> int:
         host=args.host,
         port=args.puerto,
         app_dir=str(BACKEND),
-        reload=args.recarga,
+        # Por defecto se reinicia al guardar: evita quedarse con una version
+        # anterior del codigo mientras las plantillas ya cambiaron.
+        reload=not args.sin_recarga,
         log_level="info",
     )
     return 0

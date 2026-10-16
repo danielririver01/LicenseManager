@@ -207,6 +207,68 @@ def test_la_ficha_de_equipo_tampoco_usa_manejadores_inline(client, db_session):
 
 
 # --------------------------------------------------------------------------- #
+# Un error inesperado nunca muestra "Internal Server Error" pelado
+# --------------------------------------------------------------------------- #
+
+
+def _entrar(client):
+    client.post(
+        "/configurar",
+        data={
+            "nombre": "Jhoan",
+            "email": "jhoan@frubber.co",
+            "password": "clave-muy-segura-1",
+            "password_confirm": "clave-muy-segura-1",
+        },
+    )
+
+
+def test_un_error_inesperado_muestra_una_pantalla_util(client, db_session, monkeypatch):
+    """El detalle tecnico va al registro; al Titular se le da una salida."""
+    from fastapi.testclient import TestClient
+
+    from license_manager.web import routes
+
+    _entrar(client)
+
+    def explotar(*_args, **_kwargs):
+        raise RuntimeError("fallo simulado de plantilla")
+
+    monkeypatch.setattr(routes, "listar_tecnicos", explotar)
+
+    with TestClient(client.app, raise_server_exceptions=False) as crudo:
+        crudo.post(
+            "/login", data={"email": "jhoan@frubber.co", "password": "clave-muy-segura-1"}
+        )
+        respuesta = crudo.get("/mayorista")
+
+    assert respuesta.status_code == 500
+    assert "Algo falló en el servidor" in respuesta.text
+    assert "/mayorista" in respuesta.text
+    assert "Reinícialo" in respuesta.text or "Reinicia" in respuesta.text
+    # El detalle tecnico NO sale a la pantalla.
+    assert "fallo simulado" not in respuesta.text
+    assert "RuntimeError" not in respuesta.text
+    assert "Traceback" not in respuesta.text
+
+
+def test_un_error_inesperado_en_la_api_sigue_siendo_json(client, db_session, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from license_manager.web import routes
+
+    monkeypatch.setattr(
+        routes, "resumen_cierre", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("x"))
+    )
+
+    with TestClient(client.app, raise_server_exceptions=False) as crudo:
+        respuesta = crudo.get("/api/salud")
+
+    # /api/salud no usa el cierre: la API sana sigue respondiendo.
+    assert respuesta.status_code == 200
+
+
+# --------------------------------------------------------------------------- #
 # La llave privada jamas sale del servidor
 # --------------------------------------------------------------------------- #
 

@@ -7,6 +7,7 @@ capa accede al entorno directamente.
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote, urlparse
@@ -14,7 +15,7 @@ from urllib.parse import quote, urlparse
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -24,7 +25,9 @@ from license_manager.db import Base, create_session_factory
 from license_manager.deps import build_engine, load_signing_key_safely, state
 from license_manager.security.headers import SecurityHeadersMiddleware
 from license_manager.security.sessions import SessionManager
-from license_manager.web.routes import api_router, pages_router
+from license_manager.web.routes import api_router, pages_router, templates
+
+registro = logging.getLogger("license_manager")
 
 
 def create_app(settings=None) -> FastAPI:  # noqa: ANN001 - Settings opcional
@@ -67,6 +70,7 @@ def create_app(settings=None) -> FastAPI:  # noqa: ANN001 - Settings opcional
 
     app.add_exception_handler(HTTPException, _http_exception_handler)
     app.add_exception_handler(RequestValidationError, _formulario_incompleto)
+    app.add_exception_handler(Exception, _error_interno)
 
     return app
 
@@ -142,6 +146,40 @@ def _formulario_incompleto(request: Request, exc: RequestValidationError):  # no
 
     separador = "&" if "?" in destino else "?"
     return RedirectResponse(f"{destino}{separador}error={quote(mensaje)}", status_code=303)
+
+
+def _error_interno(request: Request, exc: Exception):  # noqa: ANN001, ARG001
+    """Nunca mostrar un "Internal Server Error" pelado al Titular.
+
+    El detalle tecnico va al registro del servidor (que es donde se depura) y la
+    pantalla recibe una explicacion util y una salida. Un 500 suele significar
+    que el proceso quedo con una version anterior del codigo: reiniciar lo
+    resuelve, y la pantalla lo dice.
+    """
+    registro.exception("Error no controlado en %s %s", request.method, request.url.path)
+
+    if request.url.path.startswith("/api"):
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Error interno del servidor.", "ruta": request.url.path},
+        )
+
+    try:
+        return templates.TemplateResponse(
+            request,
+            "error_interno.html",
+            {
+                "request": request,
+                "current_user": getattr(request.state, "user", None),
+                "app_name": getattr(state.settings, "app_name", "License Manager Frubber"),
+                "ruta": request.url.path,
+                "seccion": None,
+            },
+            status_code=500,
+        )
+    except Exception:  # noqa: BLE001 - si hasta el error falla, se responde plano
+        registro.exception("No se pudo pintar la pantalla de error")
+        return PlainTextResponse("Error interno del servidor.", status_code=500)
 
 
 app = create_app()

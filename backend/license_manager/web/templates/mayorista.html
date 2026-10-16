@@ -216,10 +216,10 @@
             <td>
               {% if tec.email %}<div class="correo">{{ tec.email }}</div>{% endif %}
               {% if tec.telefono %}<div class="fila-sub">{{ tec.telefono }}</div>{% endif %}
-              {% if tec.id in con_acceso %}
+              {% if tec.id in (con_acceso or []) %}
               <div class="fila-sub"><span class="badge badge-azul">Con acceso</span></div>
               {% endif %}
-              {% if not tec.email and not tec.telefono and tec.id not in con_acceso %}<span class="notilla">—</span>{% endif %}
+              {% if not tec.email and not tec.telefono and tec.id not in (con_acceso or []) %}<span class="notilla">—</span>{% endif %}
             </td>
             <td>{{ tec.paquetes_n }}</td>
             <td>
@@ -236,7 +236,7 @@
             </td>
             {% if puede_registrar %}
             <td>
-              {% if tec.id not in con_acceso %}
+              {% if tec.id not in (con_acceso or []) %}
               <button type="button" class="btn-fila activo" data-abrir-acceso
                       data-accion="/mayorista/tecnicos/{{ tec.id }}/acceso"
                       data-nombre="{{ tec.nombre }}">

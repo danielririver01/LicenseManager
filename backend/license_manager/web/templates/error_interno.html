@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titulo %}Error del servidor · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+  <div class="tarjeta acceso-restringido">
+    <div class="icono">&#9888;</div>
+    <h1 class="titulo" style="font-size:18px">Algo falló en el servidor</h1>
+    <p class="subtitulo" style="max-width:520px;margin:8px auto 0">
+      La pantalla <strong>{{ ruta }}</strong> no se pudo preparar. No se guardó
+      nada a medias: la operación quedó como estaba.
+    </p>
+
+    <div class="aviso-reglas" style="max-width:620px;margin:22px auto 0;text-align:left">
+      <strong>Si acabas de recibir una actualización de la aplicación</strong>,
+      lo más probable es que el servidor esté corriendo una versión anterior.
+      Reinícialo y vuelve a intentarlo.
+      <br><br>
+      Si el problema sigue, copia el mensaje de la consola del servidor y
+      mándaselo al responsable: ahí aparece el detalle exacto.
+    </div>
+
+    <p style="margin-top:22px">
+      <a class="btn btn-secundario" href="/">Volver al panel</a>
+    </p>
+  </div>
+</div>
+{% endblock %}
