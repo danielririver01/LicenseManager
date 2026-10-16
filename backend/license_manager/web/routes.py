@@ -47,7 +47,7 @@ from license_manager.security.passwords import (
     verify_password,
 )
 from license_manager.security.sessions import SessionManager
-from license_manager.services.audit import record_event
+from license_manager.services.audit import record_event, verify_chain
 from license_manager.services.cierres import (
     exportar_cierre_csv,
     format_millones,
@@ -64,6 +64,13 @@ from license_manager.services.directory import (
     list_equipment,
     load_equipment_file,
     set_customer_active,
+)
+from license_manager.services.historial import (
+    GRUPOS,
+    LIMITE_EVENTOS,
+    listar_eventos,
+    total_eventos,
+    usuarios_con_eventos,
 )
 from license_manager.services.ingresos import (
     ETIQUETAS_CATEGORIA,
@@ -1913,5 +1920,98 @@ def mayorista_registrar_paquete(
             f"{etiqueta_paquete(paquete.tipo_paquete)} registrado para "
             f"{tecnico.nombre if tecnico else 'el tecnico'}: "
             f"{saldo_tecnico(db, paquete.tecnico_id)} cupos disponibles."
+        ),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Historial de auditoria inmutable (UI-08, JHO-105)
+# --------------------------------------------------------------------------- #
+#
+# La pantalla NO edita ni borra: el log es append-only, el modelo rechaza toda
+# mutacion (``AuditEventInmutable``) y PostgreSQL lo bloquea con un trigger.
+# Los tres roles consultan (doc 04 v2.1, seccion 7: el administrador delegado
+# tiene "solo lectura basica"); verificar la cadena y dejar esa verificacion
+# sellada en el propio log es una accion de custodia de los Titulares.
+
+
+@pages_router.get("/historial", response_class=HTMLResponse)
+def historial_page(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    q: str = "",
+    grupo: str = "",
+    usuario: str = "",
+):
+    """UI-08 · pista inmutable de eventos con su verificacion de cadena."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    eventos = listar_eventos(db, busqueda=q, grupo=grupo, usuario=usuario)
+    total = total_eventos(db)
+    verificacion = verify_chain(db)
+
+    return _render(
+        request,
+        "historial.html",
+        {
+            "seccion": "historial",
+            "eventos": eventos,
+            "total": total,
+            "mostrados": len(eventos),
+            "truncado": total > len(eventos),
+            "limite": LIMITE_EVENTOS,
+            # Verificacion de la cadena de hash calculada en vivo al abrir.
+            "verificacion": verificacion,
+            "grupos": GRUPOS,
+            "operadores": usuarios_con_eventos(db),
+            "busqueda": q.strip(),
+            "filtro_grupo": grupo,
+            "filtro_usuario": usuario,
+            "puede_verificar": Role(user.rol).is_titular,
+            "aviso": request.query_params.get("aviso"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@pages_router.post("/historial/verificar")
+def historial_verificar(request: Request, db: Session = Depends(get_db_session)):
+    """Recomputa la cadena y sella el resultado en el propio historial."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+    if not Role(user.rol).is_titular:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo el Titular Principal y el Co-Titular verifican la cadena de auditoria.",
+        )
+
+    resultado = verify_chain(db)
+    record_event(
+        db,
+        action="auditoria.verificada",
+        user=user,
+        entity_type="auditoria",
+        entity_id=str(resultado.broken_at) if resultado.broken_at else None,
+        detail={
+            "ok": resultado.ok,
+            "total_events": resultado.total_events,
+            "broken_at": resultado.broken_at,
+        },
+    )
+    db.commit()
+
+    if resultado.ok:
+        return _volver(
+            "/historial",
+            aviso=f"Cadena integra: {resultado.total_events} evento(s) verificados.",
+        )
+    return _volver(
+        "/historial",
+        error=(
+            f"ALERTA: la cadena esta rota en el evento #{resultado.broken_at}. "
+            f"{resultado.reason}"
         ),
     )

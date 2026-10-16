@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block titulo %}Historial de auditoría · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor contenedor-ancho">
+
+  <div class="encabezado-pantalla">
+    <div>
+      <h1 class="titulo">Historial de Auditoría del Sistema</h1>
+      <p class="subtitulo">
+        Pista inmutable de eventos con marca de tiempo del servidor y el
+        operador que ejecutó cada acción. Solo se agregan filas: aquí no se
+        edita ni se borra nada.
+        {% if current_user.rol not in ('owner', 'coowner') %}
+        <br>Tu rol tiene <strong>lectura básica</strong> del historial.
+        {% endif %}
+      </p>
+    </div>
+    {% if puede_verificar %}
+    <form class="accion-form" method="post" action="/historial/verificar">
+      <button type="submit" class="btn btn-primario"
+              data-confirmar="Recomputar la cadena completa y sellar el resultado en el historial?">
+        Verificar cadena
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  <!-- Estado de la cadena de hash: se recalcula al abrir la pantalla -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="etiqueta">Integridad de la cadena</div>
+      <div class="valor" style="font-size:20px;color:{{ 'var(--verde-activo)' if verificacion.ok else 'var(--rojo-peligro)' }}">
+        {% if verificacion.ok %}&#10004; Íntegra{% else %}&#10006; Rota{% endif %}
+      </div>
+      <div class="pista">
+        {% if verificacion.ok %}
+        Hash encadenado correcto en {{ verificacion.total_events }} evento{{ 's' if verificacion.total_events != 1 else '' }}
+        {% else %}
+        Ruptura en el evento #{{ verificacion.broken_at }}: {{ verificacion.reason }}
+        {% endif %}
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Eventos registrados</div>
+      <div class="valor">{{ total }}</div>
+      <div class="pista">El registro crece para siempre (append-only)</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Bloqueo de edición</div>
+      <div class="valor" style="font-size:20px;color:var(--azul-noche)">Activo</div>
+      <div class="pista">Backend + trigger de PostgreSQL rechazan UPDATE/DELETE</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Mostrando</div>
+      <div class="valor">{{ mostrados }}</div>
+      <div class="pista">
+        {% if truncado %}Los {{ limite }} más recientes de {{ total }}{% else %}Todos los eventos visibles{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <form class="barra-filtros barra-filtros-ancha" method="get" action="/historial">
+    <input type="search" name="q" value="{{ busqueda }}"
+           placeholder="Buscar por operador, evento, detalle o identificador..."
+           aria-label="Buscar en el historial">
+    <select name="grupo" aria-label="Tipo de evento">
+      {% for valor, etiqueta in grupos %}
+      <option value="{{ valor }}" {{ 'selected' if filtro_grupo == valor else '' }}>{{ etiqueta }}</option>
+      {% endfor %}
+    </select>
+    <select name="usuario" aria-label="Operador">
+      <option value="">— Todos los operadores —</option>
+      {% for correo in operadores %}
+      <option value="{{ correo }}" {{ 'selected' if filtro_usuario == correo else '' }}>{{ correo }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secundario">Aplicar</button>
+    <a class="btn-limpio" href="/historial">Limpiar filtros</a>
+  </form>
+
+  <div class="tabla-envoltura">
+    <div class="tabla-titulo">
+      <h2>Eventos del sistema</h2>
+      <span class="cuenta-filas">Más reciente primero · hora UTC del servidor</span>
+    </div>
+    <div class="tabla-scroll">
+      <table class="tabla-operadores tabla-historial">
+        <thead>
+          <tr>
+            <th>Timestamp del servidor</th>
+            <th>Operador</th>
+            <th>Tipo de evento</th>
+            <th>Entidad / negocio</th>
+            <th>Detalle de la operación</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for evento in eventos %}
+          <tr>
+            <td>
+              {{ evento.fecha_at.strftime('%d/%m/%Y · %H:%M:%S') }} UTC
+              <div class="fila-sub">
+                #{{ evento.id }} · <code>{{ evento.hash_corto }}</code>
+                {% if evento.prev_hash_corto %}← <code>{{ evento.prev_hash_corto }}</code>{% endif %}
+              </div>
+            </td>
+            <td>
+              <div class="fila-nombre">{{ evento.usuario_nombre }}</div>
+              <div class="fila-sub">{{ evento.rol_etiqueta }}{% if evento.usuario_email %} · {{ evento.usuario_email }}{% endif %}</div>
+            </td>
+            <td><span class="badge badge-{{ evento.tono }}">{{ evento.accion_etiqueta }}</span></td>
+            <td>{{ evento.entidad }}</td>
+            <td>
+              {% if evento.resumen %}
+              {{ evento.resumen }}
+              {% else %}<span class="notilla">Sin detalle adicional</span>{% endif %}
+              <div class="fila-sub id-corto">{{ evento.accion }}</div>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" style="padding:36px;text-align:center;color:var(--text-muted)">
+              {% if busqueda or filtro_grupo or filtro_usuario %}
+              No hay eventos que coincidan con los filtros aplicados.
+              {% else %}
+              Todavía no hay eventos registrados.
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="aviso-reglas" style="margin-top:20px">
+    <strong>Cómo se garantiza la inmutabilidad:</strong> cada fila encadena el
+    hash SHA-256 del evento anterior sobre todos sus campos (incluida la fecha
+    UTC y el operador), así que editar o borrar una fila rompe la cadena y la
+    verificación lo delata. Además, el backend rechaza cualquier
+    <code>UPDATE</code>/<code>DELETE</code> sobre la tabla y PostgreSQL lo
+    bloquea con un trigger. Nunca se registran contraseñas ni la llave privada.
+  </div>
+
+</div>
+{% endblock %}

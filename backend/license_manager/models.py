@@ -33,6 +33,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    event,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -419,7 +420,6 @@ class AuditEvent(Base):
     """
 
     __tablename__ = "auditoria"
-
     # BigInteger en PostgreSQL; SQLite solo autoincrementa sobre INTEGER.
     id: Mapped[int] = mapped_column(
         BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True
@@ -439,6 +439,24 @@ class AuditEvent(Base):
     hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
 
     __table_args__ = (Index("ix_auditoria_entidad", "entidad_tipo", "entidad_id"),)
+
+
+class AuditEventInmutable(RuntimeError):
+    """Alguien intento editar o borrar un evento de auditoria (JHO-105).
+
+    La tabla es de solo escritura. Esta guarda actua en el backend, antes de
+    que el motor toque la base; el trigger de PostgreSQL y la cadena de hash
+    cubren lo que ocurra por fuera de la aplicacion.
+    """
+
+
+@event.listens_for(AuditEvent, "before_update")
+@event.listens_for(AuditEvent, "before_delete")
+def _bloquear_mutacion_de_auditoria(mapper, connection, target) -> None:  # noqa: ARG001
+    raise AuditEventInmutable(
+        "La tabla de auditoria es de solo escritura (append-only): "
+        f"no se puede actualizar ni borrar el evento #{target.id}."
+    )
 
 
 # --------------------------------------------------------------------------- #

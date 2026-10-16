@@ -504,3 +504,16 @@ p.subtitulo { color: var(--text-muted); margin-bottom: 28px; }
   body { background: #fff; }
   .soporte { border: none; box-shadow: none; }
 }
+
+/* --- Historial de auditoria inmutable (UI-08 / JHO-105) ------------------ */
+/* La tabla de UI-08 tiene cinco columnas y muestra la cola del log: necesita
+   mas ancho que el contenedor estandar. */
+.contenedor-ancho { max-width: 1250px; }
+.tabla-historial { min-width: 1040px; }
+.tabla-historial code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.tabla-historial td { vertical-align: top; white-space: normal; }
+.tabla-historial td:first-child, .tabla-historial td:nth-child(3) { white-space: nowrap; }

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+import pytest
+from sqlalchemy import select, text
 
-from license_manager.models import AuditEvent
+from license_manager.models import AuditEvent, AuditEventInmutable
 from license_manager.services.audit import record_event, verify_chain
 
 
@@ -12,6 +13,10 @@ def _registrar(db, cantidad: int, prefijo: str = "prueba") -> None:
     for i in range(cantidad):
         record_event(db, action=f"{prefijo}.{i}", detail={"indice": i})
     db.commit()
+
+
+def _primer_evento(db) -> AuditEvent:
+    return db.execute(select(AuditEvent).order_by(AuditEvent.id)).scalars().first()
 
 
 def test_la_cadena_valida_con_varios_eventos(db_session):
@@ -34,10 +39,16 @@ def test_cada_evento_encadena_el_hash_del_anterior(db_session):
 def test_alterar_el_detalle_de_un_evento_rompe_la_cadena(db_session):
     _registrar(db_session, 3)
 
-    evento = db_session.execute(select(AuditEvent).order_by(AuditEvent.id)).scalars().first()
-    # Simulamos a alguien que edita la base directamente por SSH.
-    evento.detalle = '{"indice": 999}'
+    evento = _primer_evento(db_session)
+    # Simulamos a alguien que edita la base directamente por SSH: SQL crudo,
+    # saltandose la guarda del backend.
+    db_session.execute(
+        text("UPDATE auditoria SET detalle = :nuevo WHERE id = :id"),
+        {"nuevo": '{"indice":999}', "id": evento.id},
+    )
     db_session.commit()
+    # Sin expirar, la sesion devolveria la fila cacheada y no veria el cambio.
+    db_session.expire_all()
 
     result = verify_chain(db_session)
     assert not result.ok
@@ -48,7 +59,7 @@ def test_borrar_un_evento_del_medio_rompe_la_cadena(db_session):
     _registrar(db_session, 4)
 
     eventos = db_session.execute(select(AuditEvent).order_by(AuditEvent.id)).scalars().all()
-    db_session.delete(eventos[1])
+    db_session.execute(text("DELETE FROM auditoria WHERE id = :id"), {"id": eventos[1].id})
     db_session.commit()
 
     result = verify_chain(db_session)
@@ -57,12 +68,15 @@ def test_borrar_un_evento_del_medio_rompe_la_cadena(db_session):
 
 def test_reordenar_fechas_rompe_la_cadena(db_session):
     """La fecha esta dentro del hash: reescribirla invalida el evento."""
-    from license_manager.models import to_utc
-
     _registrar(db_session, 3)
-    evento = db_session.execute(select(AuditEvent).order_by(AuditEvent.id)).scalars().first()
-    evento.fecha_at = to_utc(evento.fecha_at).replace(year=2020)
+    evento = _primer_evento(db_session)
+
+    db_session.execute(
+        text("UPDATE auditoria SET fecha_at = :fecha WHERE id = :id"),
+        {"fecha": "2020-01-01 00:00:00.000000", "id": evento.id},
+    )
     db_session.commit()
+    db_session.expire_all()
 
     assert not verify_chain(db_session).ok
 
@@ -70,11 +84,48 @@ def test_reordenar_fechas_rompe_la_cadena(db_session):
 def test_cambiar_el_usuario_que_ejecuto_la_accion_rompe_la_cadena(db_session):
     """La trazabilidad no se puede reescribir despues del hecho."""
     _registrar(db_session, 2)
-    evento = db_session.execute(select(AuditEvent).order_by(AuditEvent.id)).scalars().first()
-    evento.usuario_email = "otra.persona@frubber.co"
+    evento = _primer_evento(db_session)
+
+    db_session.execute(
+        text("UPDATE auditoria SET usuario_email = :correo WHERE id = :id"),
+        {"correo": "otra.persona@frubber.co", "id": evento.id},
+    )
     db_session.commit()
+    db_session.expire_all()
 
     assert not verify_chain(db_session).ok
+
+
+# --------------------------------------------------------------------------- #
+# Bloqueo del backend: la tabla es de solo escritura
+# --------------------------------------------------------------------------- #
+
+
+def test_el_backend_rechaza_editar_un_evento(db_session):
+    _registrar(db_session, 2)
+    evento = _primer_evento(db_session)
+    evento.detalle = '{"indice": 999}'
+
+    with pytest.raises(AuditEventInmutable):
+        db_session.flush()
+    db_session.rollback()
+
+    # El evento sigue intacto y la cadena sana.
+    assert verify_chain(db_session).ok
+    assert _primer_evento(db_session).detalle == '{"indice":0}'
+
+
+def test_el_backend_rechaza_borrar_un_evento(db_session):
+    _registrar(db_session, 2)
+    evento = _primer_evento(db_session)
+
+    db_session.delete(evento)
+    with pytest.raises(AuditEventInmutable):
+        db_session.flush()
+    db_session.rollback()
+
+    assert verify_chain(db_session).ok
+    assert len(db_session.execute(select(AuditEvent)).scalars().all()) == 2
 
 
 def test_una_cadena_vacia_es_valida(db_session):
