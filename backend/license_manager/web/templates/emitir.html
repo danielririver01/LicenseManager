@@ -182,7 +182,7 @@
         <div class="campo">
           <label for="tipo">Tipo de licencia *</label>
           <select id="tipo" name="tipo" required>
-            {% for t in tipos %}
+            {% for t in (tipos_tecnico if es_tecnico else tipos) %}
             <option value="{{ t.valor }}"
                     {{ 'selected' if (tipo_previo and tipo_previo == t.valor) or (not tipo_previo and loop.first) else '' }}>
               {{ t.etiqueta }}
@@ -208,7 +208,29 @@
 
       <div class="form-grid" style="margin-top:4px">
         <div class="campo">
-          <label for="tecnico_id">Tecnico / paquete prepago (opcional)</label>
+          <label for="tecnico_id">Tecnico / paquete prepago</label>
+          {% if es_tecnico %}
+          {# El tecnico no elige: emite SIEMPRE con su propio saldo. #}
+          <input type="text" id="tecnico_id" readonly
+                 value="{{ tecnico_propio.nombre if tecnico_propio else 'Cuenta sin vincular' }}"
+                 style="background:var(--blanco-frio)">
+          <p class="pista">
+            {% if tecnico_propio %}
+            Emites a tu nombre: cada venta descuenta un cupo de tu paquete.
+            Te quedan <strong>{{ saldo_propio }}</strong> cupo{{ 's' if saldo_propio != 1 else '' }}.
+            {% else %}
+            Tu cuenta todavía no está vinculada a una ficha de técnico: pide al
+            Titular que revise tu acceso.
+            {% endif %}
+          </p>
+          {% if tecnico_propio and saldo_propio == 0 %}
+          <div class="alerta alerta-aviso" style="margin-top:10px">
+            No tienes cupos. Puedes emitir una <strong>Prueba</strong> o un
+            <strong>Reemplazo</strong> (no gastan cupo), pero una venta necesita
+            que la sociedad te registre un paquete nuevo.
+          </div>
+          {% endif %}
+          {% else %}
           <select id="tecnico_id" name="tecnico_id">
             <option value="" {{ 'selected' if not tecnico_previo else '' }}>
               &mdash; Venta directa de la sociedad &mdash;
@@ -228,6 +250,7 @@
             <a href="/mayorista">registralos en Mayorista</a>.
             {% endif %}
           </p>
+          {% endif %}
         </div>
 
         <div class="campo">

@@ -6,21 +6,33 @@
 
   <div class="encabezado-pantalla">
     <div>
-      <h1 class="titulo">Técnicos y Paquetes Prepago (Mayorista)</h1>
+      <h1 class="titulo">{% if es_tecnico %}Mi saldo de licencias{% else %}Técnicos y Paquetes Prepago (Mayorista){% endif %}</h1>
       <p class="subtitulo">
+        {% if es_tecnico %}
+        Aquí ves tus cupos disponibles y los paquetes que has comprado. Cada venta
+        que emites descuenta un cupo; cuando llegues a cero, pide un paquete nuevo.
+        {% else %}
         Los técnicos balanceros compran cupos por adelantado y los revenden al
         público en $ 450.000 COP. La sociedad cobra el paquete completo al
         registrarlo; cada emisión a nombre del técnico descuenta un cupo.
+        {% endif %}
       </p>
     </div>
     <div class="acciones-cabecera">
-      <a class="btn btn-secundario" href="#paquetes">Ver paquetes</a>
+      {% if not es_tecnico %}<a class="btn btn-secundario" href="#paquetes">Ver paquetes</a>{% endif %}
       <a class="btn btn-primario" href="/emitir">Emitir licencia</a>
     </div>
   </div>
 
   {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
   {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  {% if es_tecnico and tecnico_propio and not tecnico_propio.activo %}
+  <div class="alerta alerta-error">
+    <strong>Tu ficha está desactivada.</strong> La sociedad suspendió tu acceso
+    para comprar paquetes. Pídele al Titular que lo reactive.
+  </div>
+  {% endif %}
 
   <!-- KPI del modelo mayorista (doc 04 v2.1, secciones 3 y 5) -->
   <div class="kpis">
@@ -47,6 +59,22 @@
   </div>
 
   <div class="rejilla-ficha">
+    {% if es_tecnico %}
+    <div class="tarjeta">
+      <h2>Tu saldo</h2>
+      <div class="kpis" style="grid-template-columns:1fr;margin-bottom:0">
+        <div class="kpi">
+          <div class="etiqueta">Cupos disponibles</div>
+          <div class="valor" style="color:{{ 'var(--verde-activo)' if resumen.cupos_disponibles > 0 else 'var(--rojo-peligro)' }}">{{ resumen.cupos_disponibles }}</div>
+          <div class="pista">{{ resumen.cupos_usados }} usados de {{ resumen.cupos_vendidos }} comprados</div>
+        </div>
+      </div>
+      <p class="pista" style="margin-top:14px">
+        El saldo lo carga la sociedad cuando le pagas un paquete. Si necesitas
+        más cupos, pídele al Titular que registre la compra.
+      </p>
+    </div>
+    {% else %}
     <!-- Alta de técnico: la registran los tres roles, como las verdulerías. -->
     <div class="tarjeta">
       <h2>Registrar técnico balancero</h2>
@@ -73,12 +101,15 @@
         </div>
         <p class="pista" style="margin-top:12px">
           Registrar al técnico no crea una cuenta de acceso: es el directorio de
-          aliados a los que se les venden paquetes prepago.
+          aliados a los que se les venden paquetes prepago. Para darle acceso
+          propio, usa <strong>Dar acceso</strong> en su fila.
         </p>
       </form>
     </div>
+    {% endif %}
 
     <!-- Registro de compra de paquete: solo Titulares (doc 04, sección 5). -->
+    {% if not es_tecnico %}
     <div class="tarjeta">
       <h2>Registrar compra de paquete</h2>
       {% if puede_registrar %}
@@ -145,9 +176,11 @@
       </div>
       {% endif %}
     </div>
+    {% endif %}
   </div>
 
   <!-- Directorio de técnicos con su saldo consolidado -->
+  {% if not es_tecnico %}
   <form class="barra-filtros" method="get" action="/mayorista" style="margin-top:20px">
     <input type="search" name="q" value="{{ busqueda }}"
            placeholder="Buscar técnico por nombre, correo o teléfono..."
@@ -156,10 +189,11 @@
     <a class="btn-limpio" href="/mayorista">Limpiar</a>
     <span class="cuenta-filas">{{ total }} técnico{{ 's' if total != 1 else '' }}</span>
   </form>
+  {% endif %}
 
-  <div class="tabla-envoltura">
+  <div class="tabla-envoltura{% if es_tecnico %} sin-margen-superior{% endif %}">
     <div class="tabla-titulo">
-      <h2>Saldo de cupos por técnico</h2>
+      <h2>{% if es_tecnico %}Tu saldo{% else %}Saldo de cupos por técnico{% endif %}</h2>
       <span class="cuenta-filas">Cupos disponibles = comprados − consumidos</span>
     </div>
     <div class="tabla-scroll">
@@ -182,7 +216,10 @@
             <td>
               {% if tec.email %}<div class="correo">{{ tec.email }}</div>{% endif %}
               {% if tec.telefono %}<div class="fila-sub">{{ tec.telefono }}</div>{% endif %}
-              {% if not tec.email and not tec.telefono %}<span class="notilla">—</span>{% endif %}
+              {% if tec.id in con_acceso %}
+              <div class="fila-sub"><span class="badge badge-azul">Con acceso</span></div>
+              {% endif %}
+              {% if not tec.email and not tec.telefono and tec.id not in con_acceso %}<span class="notilla">—</span>{% endif %}
             </td>
             <td>{{ tec.paquetes_n }}</td>
             <td>
@@ -199,6 +236,13 @@
             </td>
             {% if puede_registrar %}
             <td>
+              {% if tec.id not in con_acceso %}
+              <button type="button" class="btn-fila activo" data-abrir-acceso
+                      data-accion="/mayorista/tecnicos/{{ tec.id }}/acceso"
+                      data-nombre="{{ tec.nombre }}">
+                Dar acceso
+              </button>
+              {% endif %}
               <form class="accion-form" method="post" action="/mayorista/tecnicos/{{ tec.id }}/alternar">
                 <input type="hidden" name="activo" value="{{ '0' if tec.activo else '1' }}">
                 <button type="submit" class="btn-fila {{ 'peligro' if tec.activo else 'activo' }}"
@@ -271,13 +315,59 @@
   </div>
 
   <div class="aviso-reglas" style="margin-top:20px">
+    {% if es_tecnico %}
+    <strong>Tus cupos:</strong> cada venta que emites descuenta un cupo de tu
+    paquete más antiguo con saldo. Un reemplazo por daño de la máquina va a
+    $ 0 COP y no descuenta cupo (esa licencia ya estaba pagada); una caja
+    adicional sí consume cupo. Sin saldo no puedes emitir ventas.
+    {% else %}
     <strong>Reglas del modelo mayorista:</strong> el técnico compra cupos por
     adelantado y la sociedad cobra el paquete completo en ese momento; cada
     venta comercial a su nombre descuenta UN cupo del paquete más antiguo con
     saldo. Una reemisión por reemplazo físico justificado va a $ 0 COP y NO
     descuenta cupo (la licencia original ya estaba pagada); una caja adicional
     sí consume cupo regular. Sin saldo no hay emisión.
+    {% endif %}
   </div>
+
+  {% if not es_tecnico %}
+  <!-- Modal "Dar acceso": el técnico emite solo con su propio saldo (JHO-107).
+       Se abre desde lm.js; sin scripts inline. -->
+  <div class="modal-cuenta oculto" data-modal-acceso>
+    <div class="modal-caja">
+      <div class="modal-cabecera">
+        <h2>Dar acceso al técnico</h2>
+        <button type="button" class="modal-cerrar" data-cerrar-acceso aria-label="Cerrar">✕</button>
+      </div>
+
+      <form method="post" class="form-cuenta" data-form-acceso>
+        <div class="campo">
+          <label for="acceso_tecnico">Técnico</label>
+          <input type="text" id="acceso_tecnico" readonly
+                 data-campo-tecnico style="background:var(--blanco-frio)">
+        </div>
+        <div class="campo">
+          <label for="acceso_email">Correo de acceso *</label>
+          <input type="email" id="acceso_email" name="email" required
+                 autocomplete="off" placeholder="carlos@balanzas.co" data-campo-email>
+        </div>
+        <div class="campo">
+          <label for="acceso_clave">Contraseña inicial *</label>
+          <input type="password" id="acceso_clave" name="password" required
+                 minlength="10" autocomplete="new-password" data-campo-clave-acceso>
+          <p class="pista">
+            Mínimo 10 caracteres. Entrega esta clave al técnico: con ella entra,
+            ve su saldo y emite sus licencias. No ve el dinero de la sociedad.
+          </p>
+        </div>
+        <div class="modal-acciones">
+          <button type="button" class="btn btn-secundario" data-cerrar-acceso>Cancelar</button>
+          <button type="submit" class="btn btn-primario">Crear acceso</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
 
 </div>
 {% endblock %}

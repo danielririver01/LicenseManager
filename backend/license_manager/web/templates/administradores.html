@@ -9,8 +9,9 @@
     <div class="icono">&#128274;</div>
     <h1 class="titulo" style="font-size:18px">Acceso restringido &mdash; Error 403</h1>
     <p class="subtitulo" style="max-width:460px;margin:8px auto 0">
-      Esta seccion es de uso exclusivo del Titular de License Manager. Los
-      administradores delegados no pueden ver ni gestionar cuentas de usuario.
+      Esta seccion es de uso exclusivo del Titular de License Manager. Ni los
+      administradores delegados ni los tecnicos pueden ver ni gestionar cuentas
+      de usuario.
     </p>
     <p style="margin-top:22px"><a class="btn btn-secundario" href="/">Volver al panel</a></p>
   </div>
@@ -96,13 +97,18 @@
             <td>
               <div class="fila-nombre">{{ op.nombre }}</div>
               {% if op.es_titular %}<div class="fila-sub">Cuenta principal protegida</div>
+              {% elif op.rol == 'tecnico' %}<div class="fila-sub">Técnico con saldo prepago propio</div>
               {% else %}<div class="fila-sub">Operador de emision</div>{% endif %}
             </td>
             <td><span class="correo">{{ op.email }}</span></td>
             <td>
               {% if op.rol == 'owner' %}<span class="badge badge-azul">Titular</span>
               {% elif op.rol == 'coowner' %}<span class="badge badge-azul">Co-Titular</span>
+              {% elif op.rol == 'tecnico' %}<span class="badge badge-ambar">Técnico</span>
               {% else %}<span class="badge badge-gris">Administrador</span>{% endif %}
+              {% if op.tecnico_nombre %}
+              <div class="fila-sub">Ficha: {{ op.tecnico_nombre }}</div>
+              {% endif %}
             </td>
             <td>
               {% if op.activo %}<span class="badge badge-verde">Activo</span>

@@ -66,10 +66,20 @@ class Role(enum.StrEnum):
     OWNER = "owner"  # Titular Principal: acceso total y gestion de cuentas.
     COOWNER = "coowner"  # Co-Titular / Socio: acceso total.
     ADMIN = "admin"  # Administrador Delegado: emite y consulta, no gestiona cuentas.
+    TECNICO = "tecnico"  # Tecnico balancero: emite SOLO con su saldo prepago.
 
     @property
     def is_titular(self) -> bool:
         return self in (Role.OWNER, Role.COOWNER)
+
+    @property
+    def is_tecnico(self) -> bool:
+        return self is Role.TECNICO
+
+    @property
+    def gestiona_cuentas(self) -> bool:
+        """Solo los titulares administran usuarios, dinero y auditoria."""
+        return self.is_titular
 
 
 class EmissionType(enum.StrEnum):
@@ -148,7 +158,18 @@ class User(Base):
     desactivado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ultimo_acceso_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    __table_args__ = (CheckConstraint("rol IN ('owner','coowner','admin')", name="ck_usuarios_rol"),)
+    # Solo para el rol ``tecnico``: ata la cuenta a la ficha del tecnico que
+    # dueno de los paquetes prepago. Es lo que permite que emita unicamente con
+    # su saldo y que no pueda tocar el de otro (JHO-107).
+    tecnico_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("tecnicos.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "rol IN ('owner','coowner','admin','tecnico')", name="ck_usuarios_rol"
+        ),
+    )
 
 
 # --------------------------------------------------------------------------- #

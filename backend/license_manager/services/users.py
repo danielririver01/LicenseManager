@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from license_manager.models import License, Role, User, utcnow
+from license_manager.models import License, Role, Technician, User, utcnow
 from license_manager.security.passwords import (
     PasswordTooWeak,
     hash_password,
@@ -48,12 +48,15 @@ class OperatorRow:
     creado_at: object
     es_titular: bool
     puede_desactivarse: bool
+    # Solo para el rol tecnico: a que ficha de tecnico esta atada la cuenta.
+    tecnico_nombre: str | None = None
 
 
 _ROL_ETIQUETA = {
     Role.OWNER.value: "Titular Principal",
     Role.COOWNER.value: "Co-Titular",
     Role.ADMIN.value: "Administrador",
+    Role.TECNICO.value: "Técnico",
 }
 
 
@@ -73,13 +76,13 @@ def list_operators(db: Session) -> list[OperatorRow]:
         .subquery()
     )
     rows = db.execute(
-        select(User, func.coalesce(conteos.c.total, 0)).outerjoin(
-            conteos, conteos.c.creado_por_id == User.id
-        )
+        select(User, Technician.nombre, func.coalesce(conteos.c.total, 0))
+        .outerjoin(Technician, Technician.id == User.tecnico_id)
+        .outerjoin(conteos, conteos.c.creado_por_id == User.id)
     ).all()
 
     resultado: list[OperatorRow] = []
-    for user, total in rows:
+    for user, tecnico_nombre, total in rows:
         resultado.append(
             OperatorRow(
                 id=user.id,
@@ -93,13 +96,34 @@ def list_operators(db: Session) -> list[OperatorRow]:
                 # Titulares inmutables y la propia cuenta nunca se desactivan
                 # desde esta pantalla.
                 puede_desactivarse=Role(user.rol) != Role.OWNER,
+                tecnico_nombre=tecnico_nombre,
             )
         )
 
-    # El Titular Principal primero, despues Co-Titular y por ultimo admins.
-    orden = {Role.OWNER.value: 0, Role.COOWNER.value: 1, Role.ADMIN.value: 2}
+    # Titular Principal, Co-Titular, administradores y por ultimo tecnicos.
+    orden = {
+        Role.OWNER.value: 0,
+        Role.COOWNER.value: 1,
+        Role.ADMIN.value: 2,
+        Role.TECNICO.value: 3,
+    }
     resultado.sort(key=lambda r: (orden.get(r.rol, 9), r.nombre.lower()))
     return resultado
+
+
+def tecnico_de_usuario(db: Session, user: User) -> Technician | None:
+    """Ficha de tecnico de una cuenta de tecnico (None si no tiene o no aplica)."""
+    if not user.tecnico_id:
+        return None
+    return db.get(Technician, user.tecnico_id)
+
+
+def tecnicos_con_acceso(db: Session) -> set[str]:
+    """Ids de tecnicos que ya tienen cuenta de acceso creada."""
+    filas = db.execute(
+        select(User.tecnico_id).where(User.tecnico_id.is_not(None))
+    ).scalars()
+    return {tecnico_id for tecnico_id in filas if tecnico_id}
 
 
 def count_active_titulares(db: Session, excluding_user_id: str | None = None) -> int:
@@ -120,10 +144,13 @@ def create_user(
     email: str,
     password: str,
     rol: str,
+    tecnico_id: str | None = None,
 ) -> User:
-    """Alta de Co-Titular o Administrador Delegado."""
-    if rol not in (Role.COOWNER.value, Role.ADMIN.value):
-        raise UserManagementError("Rol no valido: solo se puede crear Co-Titular o Administrador.")
+    """Alta de Co-Titular, Administrador Delegado o acceso de Tecnico."""
+    if rol not in (Role.COOWNER.value, Role.ADMIN.value, Role.TECNICO.value):
+        raise UserManagementError(
+            "Rol no valido: se puede crear Co-Titular, Administrador o Tecnico."
+        )
 
     # Regla de escalada de privilegios: un Co-Titular no puede fabricar otro
     # Co-Titular. Si lo permitiera, un socio podria multiplicarse a si mismo y
@@ -141,6 +168,30 @@ def create_user(
         raise UserManagementError("El nombre completo es obligatorio.")
     if not email:
         raise UserManagementError("El correo de acceso es obligatorio.")
+
+    # Una cuenta de tecnico SIEMPRE va atada a su ficha: es lo que limita que
+    # emita con su saldo y solo con el suyo (JHO-107).
+    tecnico: Technician | None = None
+    if rol == Role.TECNICO.value:
+        tecnico = db.get(Technician, tecnico_id) if tecnico_id else None
+        if tecnico is None:
+            raise UserManagementError(
+                "Elige el tecnico al que pertenece este acceso: su cuenta queda "
+                "atada a su saldo prepago."
+            )
+        if not tecnico.activo:
+            raise UserManagementError(
+                f"La ficha de {tecnico.nombre} esta desactivada: no se le da acceso."
+            )
+        ya_tiene = db.execute(
+            select(User).where(User.tecnico_id == tecnico.id)
+        ).scalar_one_or_none()
+        if ya_tiene is not None:
+            raise UserManagementError(
+                f"{tecnico.nombre} ya tiene un acceso con el correo {ya_tiene.email}."
+            )
+    elif tecnico_id:
+        raise UserManagementError("Solo una cuenta de Tecnico se ata a una ficha de tecnico.")
 
     try:
         validate_password_strength(password)
@@ -160,6 +211,7 @@ def create_user(
         rol=rol,
         activo=True,
         creado_por_id=actor.id,
+        tecnico_id=tecnico.id if tecnico else None,
     )
     db.add(user)
     db.flush()

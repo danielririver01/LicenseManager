@@ -93,6 +93,7 @@ from license_manager.services.licencias import (
     MOTIVO_VIGENTE,
     PRECIO_VENTA_COP,
     TIPOS_EMISION,
+    TIPOS_EMISION_TECNICO,
     EmissionError,
     diagnosticar_codigo,
     emit_license,
@@ -147,6 +148,8 @@ from license_manager.services.users import (
     reset_password,
     rol_etiqueta,
     set_user_active,
+    tecnico_de_usuario,
+    tecnicos_con_acceso,
 )
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "web" / "templates"
@@ -325,6 +328,22 @@ def logout(request: Request, db: Session = Depends(get_db_session)):
 # --------------------------------------------------------------------------- #
 
 
+def _ultimas_licencias_del_tecnico(db: Session, user_id: str, limite: int = 8) -> list[dict]:
+    """Ultimas licencias emitidas por esta cuenta, con su equipo y verduleria."""
+    filas = db.execute(
+        select(License, Equipment.hardware_code, Customer.nombre)
+        .join(Equipment, Equipment.id == License.equipo_id, isouter=True)
+        .join(Customer, Customer.id == Equipment.cliente_id, isouter=True)
+        .where(License.creado_por_id == user_id)
+        .order_by(License.emitida_at.desc())
+        .limit(limite)
+    ).all()
+    return [
+        {"licencia": licencia, "codigo": codigo, "cliente": nombre}
+        for licencia, codigo, nombre in filas
+    ]
+
+
 @pages_router.get("/", response_class=HTMLResponse)
 def home(request: Request, db: Session = Depends(get_db_session)):
     if _count_users(db) == 0:
@@ -334,6 +353,27 @@ def home(request: Request, db: Session = Depends(get_db_session)):
     request.state.user = user
     if user is None:
         return RedirectResponse("/login", status_code=303)
+
+    # El tecnico tiene su propio resumen: su saldo y lo que el mismo emitio.
+    # El dinero de la sociedad no se le muestra (JHO-107).
+    if Role(user.rol).is_tecnico:
+        tecnico = tecnico_de_usuario(db, user)
+        return _render(
+            request,
+            "panel_tecnico.html",
+            {
+                "tecnico": tecnico,
+                "saldo": saldo_tecnico(db, tecnico.id) if tecnico else 0,
+                "paquetes": listar_paquetes(db, tecnico_id=tecnico.id) if tecnico else [],
+                "emitidas_n": db.execute(
+                    select(func.count(License.id)).where(License.creado_por_id == user.id)
+                ).scalar_one()
+                or 0,
+                "ultimas": _ultimas_licencias_del_tecnico(db, user.id),
+                "format_cop": format_cop,
+                "format_hardware_code": format_hardware_code,
+            },
+        )
 
     total_equipos = db.execute(select(func.count(Equipment.id))).scalar_one() or 0
     total_licencias = db.execute(select(func.count(License.id))).scalar_one() or 0
@@ -660,6 +700,31 @@ def _volver(destino: str, aviso: str | None = None, error: str | None = None) ->
     return RedirectResponse(f"{destino}{separador}{'&'.join(params)}", status_code=303)
 
 
+def _denegar_modulo(request: Request, *, modulo: str, motivo: str):
+    """403 visible y uniforme para un modulo fuera del alcance del rol."""
+    return _render(
+        request,
+        "acceso_denegado.html",
+        {"modulo": modulo, "motivo": motivo},
+        status_code=403,
+    )
+
+
+def _sin_acceso_a_dinero(request: Request, user: User, modulo: str):
+    """El rol tecnico emite con su saldo; el dinero de la sociedad no es suyo."""
+    if Role(user.rol).is_tecnico:
+        return _denegar_modulo(
+            request,
+            modulo=modulo,
+            motivo=(
+                "Tu cuenta de Técnico sirve para emitir licencias con tu saldo "
+                "prepago. La parte contable de la sociedad (cobros, cierres, "
+                "liquidaciones) no forma parte de tu acceso."
+            ),
+        )
+    return None
+
+
 @pages_router.get("/clientes", response_class=HTMLResponse)
 def clientes_page(request: Request, db: Session = Depends(get_db_session), q: str = ""):
     """UI-03 · listado de verdulerias con buscador y estado comercial."""
@@ -949,6 +1014,10 @@ def emitir_page(
     if denied:
         return denied
 
+    # Un tecnico no elige tecnico: emite SIEMPRE con el suyo (JHO-107).
+    tecnico_propio = tecnico_de_usuario(db, user) if Role(user.rol).is_tecnico else None
+    es_tecnico = Role(user.rol).is_tecnico
+
     resultado = None
     tecnico_resultado = None
     saldo_resultado = None
@@ -999,8 +1068,15 @@ def emitir_page(
             "tipo_previo": tipo,
             "tecnico_previo": tecnico,
             "justificacion_previa": justificacion,
-            # Selector de paquete prepago (JHO-104, UI-10).
+            # Selector de paquete prepago (JHO-104, UI-10). Un tecnico no lo ve:
+            # su nombre viene fijo y su saldo es lo unico que puede gastar.
             "tecnicos": tecnicos_para_emision(db),
+            "es_tecnico": es_tecnico,
+            "tecnico_propio": tecnico_propio,
+            "saldo_propio": (
+                saldo_tecnico(db, tecnico_propio.id) if tecnico_propio else 0
+            ),
+            "tipos_tecnico": TIPOS_EMISION_TECNICO,
             "precio_venta": PRECIO_VENTA_COP,
             "hoy": hoy.strftime("%d/%m/%Y"),
             "format_cop": format_cop,
@@ -1054,9 +1130,31 @@ def emitir_submit(
         )
 
     # Tecnico balancero (opcional): identifica la operacion antes del dinero.
-    tecnico = tecnico_de(db, tecnico_id)
-    if tecnico_id and tecnico is None:
-        return _volver(destino, error="El tecnico indicado no existe.")
+    # Si quien firma es un tecnico, el tecnico es SIEMPRE el de su cuenta: el
+    # campo del formulario se ignora para que no pueda gastar cupos ajenos.
+    if Role(user.rol).is_tecnico:
+        tecnico = tecnico_de_usuario(db, user)
+        if tecnico is None:
+            return _volver(
+                destino,
+                error=(
+                    "Tu cuenta de Técnico no está vinculada a una ficha de técnico. "
+                    "Pide al Titular que revise tu acceso."
+                ),
+            )
+        if tipo == EmissionType.COURTESY.value:
+            return _volver(
+                destino,
+                error=(
+                    "Una cortesía la autoriza la sociedad, no el técnico. "
+                    "Elige Venta estándar, Prueba o Reemplazo."
+                ),
+            )
+    else:
+        tecnico = tecnico_de(db, tecnico_id)
+        if tecnico_id and tecnico is None:
+            return _volver(destino, error="El tecnico indicado no existe.")
+
     if tecnico is not None and not tecnico.activo:
         return _volver(
             destino,
@@ -1202,6 +1300,10 @@ def ingresos_page(
     if denied:
         return denied
 
+    sin_acceso = _sin_acceso_a_dinero(request, user, "Ingresos y cobros")
+    if sin_acceso:
+        return sin_acceso
+
     # Primero el ciclo automatico: lo que paso el dia 31 o el 34 se aplica
     # antes de pintar cualquier cifra de la pantalla.
     try:
@@ -1287,6 +1389,10 @@ def ingresos_registrar(
     if denied:
         return denied
 
+    sin_acceso = _sin_acceso_a_dinero(request, user, "Ingresos y cobros")
+    if sin_acceso:
+        return sin_acceso
+
     preservado = {
         "registrar": licencia_id,
         "f_categoria": categoria,
@@ -1365,6 +1471,10 @@ def ingresos_cambiar_cuenta(
     if denied:
         return denied
 
+    sin_acceso = _sin_acceso_a_dinero(request, user, "Ingresos y cobros")
+    if sin_acceso:
+        return sin_acceso
+
     destino = _ingresos_destino({"cuenta": licencia_id})
     licencia = licencia_de(db, licencia_id)
     if licencia is None:
@@ -1435,6 +1545,10 @@ def cierres_page(request: Request, db: Session = Depends(get_db_session), period
     if denied:
         return denied
 
+    sin_acceso = _sin_acceso_a_dinero(request, user, "Cierres mensuales")
+    if sin_acceso:
+        return sin_acceso
+
     mes, rechazo = _periodo_valido(periodo, "/cierres")
     if rechazo:
         return rechazo
@@ -1466,6 +1580,10 @@ def cierres_exportar(request: Request, db: Session = Depends(get_db_session), pe
     user, denied = _sesion_o_login(request, db)
     if denied:
         return denied
+
+    sin_acceso = _sin_acceso_a_dinero(request, user, "Cierres mensuales")
+    if sin_acceso:
+        return sin_acceso
 
     mes, rechazo = _periodo_valido(periodo, "/cierres")
     if rechazo:
@@ -1771,12 +1889,43 @@ def mayorista_page(request: Request, db: Session = Depends(get_db_session), q: s
     if denied:
         return denied
 
+    # El tecnico ve SOLO su tarjeta y sus paquetes: el directorio completo y los
+    # saldos de los demas son informacion de la sociedad (JHO-107).
+    if Role(user.rol).is_tecnico:
+        propio = tecnico_de_usuario(db, user)
+        filas = [fila for fila in listar_tecnicos(db) if propio and fila.id == propio.id]
+        return _render(
+            request,
+            "mayorista.html",
+            {
+                "seccion": "mayorista",
+                "es_tecnico": True,
+                "tecnico_propio": propio,
+                "tecnicos": filas,
+                "paquetes": listar_paquetes(db, tecnico_id=propio.id if propio else None),
+                "tipos_paquete": TIPOS_PAQUETE,
+                "resumen": resumen_mayorista(db, solo_tecnico_id=propio.id if propio else None),
+                "metodos": METODOS_PAGO,
+                "busqueda": "",
+                "total": len(filas),
+                "puede_registrar": False,
+                "con_acceso": set(),
+                "precio_venta": PRECIO_VENTA_COP,
+                "format_cop": format_cop,
+                "format_hardware_code": format_hardware_code,
+                "aviso": request.query_params.get("aviso"),
+                "error": request.query_params.get("error"),
+            },
+        )
+
     filas = listar_tecnicos(db, q)
     return _render(
         request,
         "mayorista.html",
         {
             "seccion": "mayorista",
+            "es_tecnico": False,
+            "tecnico_propio": None,
             "tecnicos": filas,
             "paquetes": listar_paquetes(db),
             "tipos_paquete": TIPOS_PAQUETE,
@@ -1785,6 +1934,8 @@ def mayorista_page(request: Request, db: Session = Depends(get_db_session), q: s
             "busqueda": q.strip(),
             "total": len(filas),
             "puede_registrar": Role(user.rol).is_titular,
+            # Tecnicos que ya tienen acceso creado, para ofrecer "Dar acceso".
+            "con_acceso": tecnicos_con_acceso(db),
             "precio_venta": PRECIO_VENTA_COP,
             "format_cop": format_cop,
             "format_hardware_code": format_hardware_code,
@@ -1806,6 +1957,11 @@ def mayorista_crear_tecnico(
     user, denied = _sesion_o_login(request, db)
     if denied:
         return denied
+
+    # Un tecnico no da de alta a otros tecnicos: eso es de la sociedad.
+    sin_acceso = _sin_acceso_a_dinero(request, user, "Mayorista")
+    if sin_acceso:
+        return sin_acceso
 
     try:
         tecnico = crear_tecnico(
@@ -1830,6 +1986,62 @@ def mayorista_crear_tecnico(
     db.commit()
 
     return _volver("/mayorista", aviso=f"Tecnico {tecnico.nombre} registrado.")
+
+
+@pages_router.post("/mayorista/tecnicos/{tecnico_id}/acceso")
+def mayorista_dar_acceso(
+    request: Request,
+    tecnico_id: str,
+    email: str = Form(""),
+    password: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-10 · da acceso propio a un tecnico, atado a su saldo (Titulares)."""
+    user = _mayorista_titular(request, db)
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+
+    tecnico = tecnico_de(db, tecnico_id)
+    if tecnico is None:
+        return _volver("/mayorista", error="El tecnico indicado no existe.")
+
+    try:
+        nuevo = create_user(
+            db,
+            actor=user,
+            nombre=tecnico.nombre,
+            email=email,
+            password=password,
+            rol=Role.TECNICO.value,
+            tecnico_id=tecnico.id,
+        )
+    except UserManagementError as exc:
+        db.rollback()
+        return _volver("/mayorista", error=str(exc))
+
+    record_event(
+        db,
+        action="usuario.creado",
+        user=user,
+        entity_type="usuario",
+        entity_id=nuevo.id,
+        # Nunca se registra la contrasena, ni hasheada ni en claro.
+        detail={
+            "rol": nuevo.rol,
+            "email_creado": nuevo.email,
+            "tecnico_id": tecnico.id,
+            "tecnico_nombre": tecnico.nombre,
+        },
+    )
+    db.commit()
+
+    return _volver(
+        "/mayorista",
+        aviso=(
+            f"Acceso creado para {tecnico.nombre} ({nuevo.email}). Ya puede emitir "
+            "licencias con su saldo sin depender de nadie."
+        ),
+    )
 
 
 @pages_router.post("/mayorista/tecnicos/{tecnico_id}/alternar")
@@ -1947,6 +2159,10 @@ def historial_page(
     user, denied = _sesion_o_login(request, db)
     if denied:
         return denied
+
+    sin_acceso = _sin_acceso_a_dinero(request, user, "Historial de auditoría")
+    if sin_acceso:
+        return sin_acceso
 
     eventos = listar_eventos(db, busqueda=q, grupo=grupo, usuario=usuario)
     total = total_eventos(db)

@@ -15,6 +15,7 @@
       <span>{{ current_user.nombre_completo }}
         {% if current_user.rol == 'owner' %}<span class="badge badge-azul">Titular</span>
         {% elif current_user.rol == 'coowner' %}<span class="badge badge-azul">Co-Titular</span>
+        {% elif current_user.rol == 'tecnico' %}<span class="badge badge-ambar">Técnico</span>
         {% else %}<span class="badge badge-gris">Admin</span>{% endif %}
       </span>
       <form method="post" action="/logout" style="display:inline">
@@ -30,10 +31,14 @@
       <li><a href="/" class="{{ 'activo' if seccion == 'panel' else '' }}">Panel</a></li>
       <li><a href="/clientes" class="{{ 'activo' if seccion == 'clientes' else '' }}">Clientes</a></li>
       <li><a href="/equipos" class="{{ 'activo' if seccion == 'equipos' else '' }}">Equipos y licencias</a></li>
+      {% if current_user.rol != 'tecnico' %}
       <li><a href="/ingresos" class="{{ 'activo' if seccion == 'ingresos' else '' }}">Ingresos</a></li>
       <li><a href="/cierres" class="{{ 'activo' if seccion == 'cierres' else '' }}">Cierres mensuales</a></li>
+      {% endif %}
       <li><a href="/mayorista" class="{{ 'activo' if seccion == 'mayorista' else '' }}">Mayorista</a></li>
+      {% if current_user.rol != 'tecnico' %}
       <li><a href="/historial" class="{{ 'activo' if seccion == 'historial' else '' }}">Historial</a></li>
+      {% endif %}
       {% if current_user.rol in ('owner', 'coowner') %}
       <li><a href="/liquidaciones" class="{{ 'activo' if seccion == 'liquidaciones' else '' }}">Liquidación</a></li>
       <li><a href="/administradores" class="{{ 'activo' if seccion == 'administradores' else '' }}">Administradores</a></li>

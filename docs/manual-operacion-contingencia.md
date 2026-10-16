@@ -21,14 +21,32 @@ Los detalles técnicos del servidor están en `deploy/README.md`.
 
 ## 2. Quién puede hacer qué
 
-| Módulo | Titular Principal | Co-Titular (Socio) | Administrador Delegado |
-| --- | :---: | :---: | :---: |
-| Crear usuarios y socios (Administradores) | Sí | Sí | **No (403)** |
-| Liquidación y utilidades | Sí | Sí | **No (403)** |
-| Historial de auditoría | Sí | Sí | Lectura básica |
-| Comprar paquetes mayoristas | Sí | Sí | **No (403)** |
-| Emitir licencias | Sí | Sí | Sí |
-| Registrar verdulerías, equipos y cobros | Sí | Sí | Sí |
+| Módulo | Titular Principal | Co-Titular (Socio) | Administrador Delegado | Técnico |
+| --- | :---: | :---: | :---: | :---: |
+| Crear usuarios y socios (Administradores) | Sí | Sí | **No (403)** | **No (403)** |
+| Liquidación y utilidades | Sí | Sí | **No (403)** | **No (403)** |
+| Historial de auditoría | Sí | Sí | Lectura básica | **No (403)** |
+| Comprar paquetes mayoristas | Sí | Sí | **No (403)** | **No (403)** |
+| Dar acceso a un técnico | Sí | Sí | **No (403)** | **No (403)** |
+| Ver el saldo de los técnicos | Sí | Sí | Sí | **Solo el suyo** |
+| Emitir licencias | Sí | Sí | Sí | **Solo con su saldo** |
+| Registrar verdulerías, equipos y cobros | Sí | Sí | Sí | Verdulerías y equipos |
+
+### El acceso del técnico (JHO-107)
+
+Un técnico balancero puede tener **cuenta propia**, atada a su ficha y a su
+saldo prepago. Se la crea el Titular desde **Mayorista → Dar acceso**.
+
+* Entra cuando quiere y emite solo, sin llamar a nadie.
+* Cada venta le descuenta **un cupo de su paquete** (nada más se le cobra).
+* Ve **su** saldo, **sus** paquetes y **sus** emisiones. No ve a los demás
+  técnicos ni el dinero de la sociedad.
+* Puede emitir **venta**, **prueba** y **reemplazo** justificado. **No** puede
+  regalar cortesías: esas las autoriza la sociedad.
+* Cuando se queda sin cupos, pide un paquete nuevo. Sin saldo no puede vender.
+
+Si un técnico se va, se desactiva su cuenta desde **Administradores**: pierde el
+acceso al instante y su historial y sus licencias se conservan.
 
 ## 3. Operación diaria
 

@@ -244,10 +244,24 @@ def listar_paquetes(db: Session, *, tecnico_id: str | None = None) -> list[Paque
     return filas
 
 
-def resumen_mayorista(db: Session) -> ResumenMayorista:
+def resumen_mayorista(
+    db: Session, *, solo_tecnico_id: str | None = None
+) -> ResumenMayorista:
+    """KPI de cabecera de UI-10.
+
+    Con ``solo_tecnico_id`` se limita a ese tecnico: es lo que ve una cuenta de
+    tecnico, que no debe conocer los totales de la sociedad (JHO-107).
+    """
+    filtros = []
+    if solo_tecnico_id:
+        filtros.append(WholesalePackage.tecnico_id == solo_tecnico_id)
+
     activos = int(
         db.execute(
-            select(func.count(Technician.id)).where(Technician.activo.is_(True))
+            select(func.count(Technician.id)).where(
+                Technician.activo.is_(True),
+                *([Technician.id == solo_tecnico_id] if solo_tecnico_id else []),
+            )
         ).scalar_one()
     )
     vendidos, usados, recaudado = db.execute(
@@ -255,7 +269,7 @@ def resumen_mayorista(db: Session) -> ResumenMayorista:
             func.coalesce(func.sum(WholesalePackage.licencias_total), 0),
             func.coalesce(func.sum(WholesalePackage.licencias_usadas), 0),
             func.coalesce(func.sum(WholesalePackage.valor_total_cop), 0),
-        )
+        ).where(*filtros)
     ).one()
     vendidos = int(vendidos)
     usados = int(usados)

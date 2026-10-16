@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block titulo %}Panel · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  <div class="encabezado-pantalla">
+    <div>
+      <h1 class="titulo">Hola, {{ current_user.nombre_completo.split(' ')[0] }}</h1>
+      <p class="subtitulo">
+        {% if tecnico %}
+        Este es tu acceso de técnico: emites licencias con tu saldo prepago y no
+        dependes de nadie más.
+        {% else %}
+        Tu cuenta de técnico todavía no está vinculada a una ficha de técnico.
+        Pide al Titular que revise tu acceso.
+        {% endif %}
+      </p>
+    </div>
+    <div class="acciones-cabecera">
+      <a class="btn btn-primario" href="/emitir">Emitir una licencia</a>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="etiqueta">Tus cupos disponibles</div>
+      <div class="valor" style="color:{{ 'var(--verde-activo)' if saldo > 0 else 'var(--rojo-peligro)' }}">{{ saldo }}</div>
+      <div class="pista">
+        {% if saldo > 0 %}Puedes emitir {{ saldo }} licencia{{ 's' if saldo != 1 else '' }} de venta
+        {% else %}Sin saldo: pide a la sociedad un paquete nuevo{% endif %}
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Licencias que emitiste</div>
+      <div class="valor">{{ emitidas_n }}</div>
+      <div class="pista">Todas quedan registradas a tu nombre</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Paquetes que compraste</div>
+      <div class="valor">{{ paquetes|length }}</div>
+      <div class="pista">Historial de tus compras</div>
+    </div>
+  </div>
+
+  {% if saldo == 0 and tecnico %}
+  <div class="alerta alerta-aviso">
+    <strong>Te quedaste sin cupos.</strong> Cuando la sociedad te registre un
+    paquete nuevo, tu saldo aparece aquí al instante y podrás seguir emitiendo.
+  </div>
+  {% endif %}
+
+  <div class="tabla-envoltura">
+    <div class="tabla-titulo">
+      <h2>Tus últimas licencias emitidas</h2>
+      <span class="cuenta-filas">{{ emitidas_n }} en total</span>
+    </div>
+    <div class="tabla-scroll">
+      <table class="tabla-operadores">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Verdulería</th>
+            <th>Código del equipo</th>
+            <th>Tipo</th>
+            <th>Cupo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fila in ultimas %}
+          <tr>
+            <td>{{ fila.licencia.emitida_fecha.strftime('%d/%m/%Y') }}</td>
+            <td>{{ fila.cliente or 'Sin verduleria' }}</td>
+            <td>
+              {% if fila.codigo %}
+              <code class="id-corto">{{ format_hardware_code(fila.codigo) }}</code>
+              {% else %}<span class="notilla">—</span>{% endif %}
+            </td>
+            <td>{{ fila.licencia.tipo_emision }}</td>
+            <td>
+              {% if fila.licencia.cupo_descontado %}
+              <span class="badge badge-ambar">1 cupo</span>
+              {% else %}
+              <span class="badge badge-gris">No descuenta</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="5" style="padding:36px;text-align:center;color:var(--text-muted)">
+              Todavía no has emitido ninguna licencia.
+              <a href="/emitir">Emite la primera →</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% if paquetes %}
+  <div class="tabla-envoltura" style="margin-top:20px">
+    <div class="tabla-titulo">
+      <h2>Tus paquetes prepago</h2>
+      <span class="cuenta-filas">Se descuentan del más antiguo al más nuevo</span>
+    </div>
+    <div class="tabla-scroll">
+      <table class="tabla-operadores">
+        <thead>
+          <tr>
+            <th>Fecha de compra</th>
+            <th>Paquete</th>
+            <th>Licencias</th>
+            <th>Usadas</th>
+            <th>Te quedan</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in paquetes %}
+          <tr>
+            <td>{{ p.comprado_at.strftime('%d/%m/%Y') }}</td>
+            <td>{{ p.tipo_etiqueta }}</td>
+            <td>{{ p.licencias_total }}</td>
+            <td>{{ p.licencias_usadas }}</td>
+            <td>
+              <strong style="color:{{ 'var(--verde-activo)' if p.cupos_disponibles > 0 else 'var(--text-muted)' }}">
+                {{ p.cupos_disponibles }}
+              </strong>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="aviso-reglas" style="margin-top:20px">
+    <strong>Cómo funciona tu acceso:</strong> cada venta que emites descuenta un
+    cupo de tu paquete más antiguo y no se te cobra nada más (el cupo ya lo
+    pagaste). Un reemplazo por daño de la máquina va a $ 0 y no gasta cupo. Si
+    vendes una caja adicional, sí consume cupo.
+  </div>
+
+</div>
+{% endblock %}

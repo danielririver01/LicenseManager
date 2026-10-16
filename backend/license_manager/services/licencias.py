@@ -83,6 +83,13 @@ TIPOS_EMISION: tuple[TipoEmision, ...] = (
     TipoEmision(EmissionType.COURTESY.value, "Cortesia de la sociedad ($0)", False),
 )
 
+# Lo que puede emitir un tecnico desde su propio acceso (JHO-107): la cortesia
+# la autoriza la sociedad, no el. Una prueba y un reemplazo son trabajo de campo
+# y no cuestan cupo.
+TIPOS_EMISION_TECNICO: tuple[TipoEmision, ...] = tuple(
+    tipo for tipo in TIPOS_EMISION if tipo.valor != EmissionType.COURTESY.value
+)
+
 
 def tipo_emision_por(valor: str) -> TipoEmision | None:
     valor = (valor or "").strip().lower()

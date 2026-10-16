@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block titulo %}Acceso restringido · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+  <div class="tarjeta acceso-restringido">
+    <div class="icono">&#128274;</div>
+    <h1 class="titulo" style="font-size:18px">Acceso restringido &mdash; Error 403</h1>
+    <p class="subtitulo" style="max-width:480px;margin:8px auto 0">{{ motivo }}</p>
+    <p class="pista" style="margin-top:14px">Módulo: {{ modulo }}</p>
+    <p style="margin-top:22px">
+      <a class="btn btn-secundario" href="/">Volver al panel</a>
+      <a class="btn btn-primario" href="/emitir">Emitir una licencia</a>
+    </p>
+  </div>
+</div>
+{% endblock %}

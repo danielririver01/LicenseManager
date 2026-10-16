@@ -517,3 +517,7 @@ p.subtitulo { color: var(--text-muted); margin-bottom: 28px; }
 }
 .tabla-historial td { vertical-align: top; white-space: normal; }
 .tabla-historial td:first-child, .tabla-historial td:nth-child(3) { white-space: nowrap; }
+
+/* --- Rol tecnico (JHO-107) ----------------------------------------------- */
+/* Cuando el tecnico ve su propio saldo, la tabla va pegada al bloque previo. */
+.sin-margen-superior { margin-top: 0; }

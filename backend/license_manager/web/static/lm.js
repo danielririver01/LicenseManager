@@ -618,6 +618,82 @@
     }
   }
 
+  /* --------------------------------------------------------------------- *
+   * Dar acceso a un tecnico (UI-10 / JHO-107).
+   *
+   * El tecnico pasa a tener cuenta propia: entra, ve su saldo y emite sin
+   * depender de la sociedad. El modal evita el script inline (CSP).
+   * --------------------------------------------------------------------- */
+
+  function prepararModalAcceso() {
+    var modal = document.querySelector("[data-modal-acceso]");
+    if (!modal) {
+      return;
+    }
+
+    var formulario = modal.querySelector("[data-form-acceso]");
+    var campoNombre = modal.querySelector("[data-campo-tecnico]");
+    var campoEmail = modal.querySelector("[data-campo-email]");
+    var campoClave = modal.querySelector("[data-campo-clave-acceso]");
+
+    function abrir(datos) {
+      if (formulario && datos.accion) {
+        formulario.setAttribute("action", datos.accion);
+      }
+      if (campoNombre) {
+        campoNombre.value = datos.nombre || "";
+      }
+      if (campoEmail) {
+        campoEmail.value = "";
+      }
+      if (campoClave) {
+        campoClave.value = "";
+      }
+      modal.classList.remove("oculto");
+      if (campoEmail) {
+        campoEmail.focus();
+      }
+    }
+
+    function cerrar() {
+      modal.classList.add("oculto");
+    }
+
+    var botonesAbrir = document.querySelectorAll("[data-abrir-acceso]");
+    Array.prototype.forEach.call(botonesAbrir, function (boton) {
+      boton.addEventListener("click", function () {
+        abrir({
+          accion: boton.getAttribute("data-accion"),
+          nombre: boton.getAttribute("data-nombre"),
+        });
+      });
+    });
+
+    var botonesCerrar = modal.querySelectorAll("[data-cerrar-acceso]");
+    Array.prototype.forEach.call(botonesCerrar, function (boton) {
+      boton.addEventListener("click", cerrar);
+    });
+
+    document.addEventListener("keydown", function (evento) {
+      if (evento.key === "Escape" && !modal.classList.contains("oculto")) {
+        cerrar();
+      }
+    });
+
+    if (formulario) {
+      formulario.addEventListener("submit", function (evento) {
+        var clave = campoClave ? String(campoClave.value || "") : "";
+        if (clave.length < 10) {
+          evento.preventDefault();
+          window.alert("La contrasena debe tener al menos 10 caracteres.");
+          if (campoClave) {
+            campoClave.focus();
+          }
+        }
+      });
+    }
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
       prepararBotones();
@@ -629,6 +705,7 @@
       prepararModalPago();
       prepararImpresion();
       prepararModalRestablecer();
+      prepararModalAcceso();
     });
   } else {
     prepararBotones();
@@ -640,5 +717,6 @@
     prepararModalPago();
     prepararImpresion();
     prepararModalRestablecer();
+    prepararModalAcceso();
   }
 })();

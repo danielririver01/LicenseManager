@@ -189,6 +189,7 @@ backend/
     tools/
       genkey.py         Genera el par ECDSA
       verificar_llave.py  Comprueba la llave contra Frubber POS (JHO-106)
+      actualizar_esquema.py  Pone al dia una base SQLite existente (JHO-107)
       backup.py         Respaldo verificado con rotación (JHO-106)
     web/
       routes.py         Páginas y API
