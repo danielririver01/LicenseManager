@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote, urlparse
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -63,6 +66,7 @@ def create_app(settings=None) -> FastAPI:  # noqa: ANN001 - Settings opcional
     app.include_router(api_router, prefix="/api")
 
     app.add_exception_handler(HTTPException, _http_exception_handler)
+    app.add_exception_handler(RequestValidationError, _formulario_incompleto)
 
     return app
 
@@ -102,6 +106,42 @@ def _http_exception_handler(request: Request, exc: HTTPException):  # noqa: ANN0
         status_code=exc.status_code,
         content={"detail": exc.detail or "No tiene permisos para realizar esta accion."},
     )
+
+
+def _formulario_incompleto(request: Request, exc: RequestValidationError):  # noqa: ANN001
+    """Un formulario al que le falta un campo no puede devolver JSON crudo.
+
+    FastAPI responde 422 con el detalle de validacion, correcto para la API pero
+    ilegible para quien acaba de pulsar un boton. En las paginas se vuelve al
+    formulario con un aviso; en ``/api`` se mantiene el JSON.
+    """
+    if request.url.path.startswith("/api"):
+        return JSONResponse(
+            status_code=422, content={"detail": jsonable_encoder(exc.errors())}
+        )
+
+    campos = sorted(
+        {
+            str(error.get("loc", ("", ""))[-1])
+            for error in exc.errors()
+            if error.get("loc")
+        }
+    )
+    mensaje = "Faltan datos obligatorios en el formulario"
+    if campos:
+        mensaje = f"{mensaje}: {', '.join(campos)}."
+
+    # Se vuelve al origen solo si es del propio sitio: nada de redirigir a un
+    # dominio ajeno que venga en la cabecera Referer.
+    destino = "/"
+    referer = request.headers.get("referer") or ""
+    if referer:
+        partes = urlparse(referer)
+        if not partes.netloc or partes.netloc == request.url.netloc:
+            destino = partes.path or "/"
+
+    separador = "&" if "?" in destino else "?"
+    return RedirectResponse(f"{destino}{separador}error={quote(mensaje)}", status_code=303)
 
 
 app = create_app()

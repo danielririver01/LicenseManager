@@ -65,12 +65,12 @@
                 <input type="hidden" name="activo" value="{{ '0' if c.activo else '1' }}">
                 {% if c.activo %}
                 <button type="submit" class="btn-fila peligro"
-                        onclick="return confirm('Desactivar {{ c.nombre }}? Sus equipos y licencias se conservan, pero ya no se firmaran licencias nuevas para este negocio.')">
+                        data-confirmar="Desactivar {{ c.nombre }}? Sus equipos y licencias se conservan, pero ya no se firmaran licencias nuevas para este negocio.">
                   Desactivar
                 </button>
                 {% else %}
                 <button type="submit" class="btn-fila activo"
-                        onclick="return confirm('Reactivar {{ c.nombre }}?')">
+                        data-confirmar="Reactivar {{ c.nombre }}?">
                   Reactivar
                 </button>
                 {% endif %}

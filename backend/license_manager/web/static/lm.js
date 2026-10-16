@@ -535,6 +535,89 @@
     });
   }
 
+  /* --------------------------------------------------------------------- *
+   * Restablecer contrasena de una cuenta (UI-09).
+   *
+   * El servidor exige la contrasena nueva: el formulario de la tabla no la
+   * llevaba, asi que la peticion se rechazaba. Se pide en un modal, igual que
+   * en UI-07, y sin ningun script inline (CSP script-src 'self').
+   * --------------------------------------------------------------------- */
+
+  function prepararModalRestablecer() {
+    var modal = document.querySelector("[data-modal-restablecer]");
+    if (!modal) {
+      return;
+    }
+
+    var formulario = modal.querySelector("[data-form-restablecer]");
+    var campoNombre = modal.querySelector("[data-campo-nombre]");
+    var campoClave = modal.querySelector("[data-campo-clave]");
+    var campoClave2 = modal.querySelector("[data-campo-clave2]");
+
+    function abrir(datos) {
+      if (formulario && datos.accion) {
+        formulario.setAttribute("action", datos.accion);
+      }
+      if (campoNombre) {
+        campoNombre.value = datos.nombre || "";
+      }
+      if (campoClave) {
+        campoClave.value = "";
+      }
+      if (campoClave2) {
+        campoClave2.value = "";
+      }
+      modal.classList.remove("oculto");
+      if (campoClave) {
+        campoClave.focus();
+      }
+    }
+
+    function cerrar() {
+      modal.classList.add("oculto");
+    }
+
+    var botonesAbrir = document.querySelectorAll("[data-abrir-restablecer]");
+    Array.prototype.forEach.call(botonesAbrir, function (boton) {
+      boton.addEventListener("click", function () {
+        abrir({
+          accion: boton.getAttribute("data-accion"),
+          nombre: boton.getAttribute("data-nombre"),
+        });
+      });
+    });
+
+    var botonesCerrar = modal.querySelectorAll("[data-cerrar-restablecer]");
+    Array.prototype.forEach.call(botonesCerrar, function (boton) {
+      boton.addEventListener("click", cerrar);
+    });
+
+    document.addEventListener("keydown", function (evento) {
+      if (evento.key === "Escape" && !modal.classList.contains("oculto")) {
+        cerrar();
+      }
+    });
+
+    if (formulario) {
+      formulario.addEventListener("submit", function (evento) {
+        var clave = campoClave ? String(campoClave.value || "") : "";
+        if (clave.length < 10) {
+          evento.preventDefault();
+          window.alert("La contrasena debe tener al menos 10 caracteres.");
+          if (campoClave) {
+            campoClave.focus();
+          }
+          return;
+        }
+        if (campoClave2 && campoClave2.value !== clave) {
+          evento.preventDefault();
+          window.alert("Las dos contrasenas deben ser iguales.");
+          campoClave2.focus();
+        }
+      });
+    }
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
       prepararBotones();
@@ -545,6 +628,7 @@
       prepararCalculadora();
       prepararModalPago();
       prepararImpresion();
+      prepararModalRestablecer();
     });
   } else {
     prepararBotones();
@@ -555,5 +639,6 @@
     prepararCalculadora();
     prepararModalPago();
     prepararImpresion();
+    prepararModalRestablecer();
   }
 })();

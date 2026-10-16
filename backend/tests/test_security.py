@@ -143,6 +143,70 @@ def test_en_desarrollo_el_host_no_se_limita(client):
 
 
 # --------------------------------------------------------------------------- #
+# CSP: ningun manejador inline en las pantallas (JHO-106, bug corregido)
+# --------------------------------------------------------------------------- #
+#
+# ``script-src 'self'`` bloquea ``onclick``/``onchange``/``onsubmit`` inline: un
+# boton que dependa de ellos no avisa nada y dispara la accion sin confirmar.
+
+
+@pytest.mark.parametrize(
+    "ruta",
+    [
+        "/",
+        "/clientes",
+        "/equipos",
+        "/ingresos",
+        "/cierres",
+        "/mayorista",
+        "/historial",
+        "/liquidaciones",
+        "/administradores",
+    ],
+)
+def test_ninguna_pantalla_usa_manejadores_inline(client, ruta):
+    client.post(
+        "/configurar",
+        data={
+            "nombre": "Jhoan",
+            "email": "jhoan@frubber.co",
+            "password": "clave-muy-segura-1",
+            "password_confirm": "clave-muy-segura-1",
+        },
+    )
+
+    cuerpo = client.get(ruta).text
+
+    assert "onclick=" not in cuerpo, f"{ruta} usa onclick, que la CSP bloquea"
+    assert "onchange=" not in cuerpo, f"{ruta} usa onchange, que la CSP bloquea"
+    assert "onsubmit=" not in cuerpo, f"{ruta} usa onsubmit, que la CSP bloquea"
+
+
+def test_la_ficha_de_equipo_tampoco_usa_manejadores_inline(client, db_session):
+    from license_manager.services.directory import create_customer, create_equipment
+
+    client.post(
+        "/configurar",
+        data={
+            "nombre": "Jhoan",
+            "email": "jhoan@frubber.co",
+            "password": "clave-muy-segura-1",
+            "password_confirm": "clave-muy-segura-1",
+        },
+    )
+    cliente = create_customer(db_session, actor_id=None, nombre="Verduleria La Huerta")
+    equipo = create_equipment(
+        db_session, actor_id=None, hardware_code_raw="A4B9C102E8F37B1A", cliente_id=cliente.id
+    )
+    db_session.commit()
+
+    cuerpo = client.get(f"/equipos/{equipo.id}").text
+
+    assert "onclick=" not in cuerpo
+    assert "onchange=" not in cuerpo
+
+
+# --------------------------------------------------------------------------- #
 # La llave privada jamas sale del servidor
 # --------------------------------------------------------------------------- #
 

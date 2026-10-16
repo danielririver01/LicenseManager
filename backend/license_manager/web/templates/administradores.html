@@ -115,24 +115,23 @@
                 <span class="notilla">Solo cambia su propia clave arriba</span>
 
               {% else %}
-                <form class="accion-form" method="post" action="/administradores/{{ op.id }}/restablecer">
-                  <button type="submit" class="btn-fila"
-                          onclick="return confirm('Restablecer la clave de {{ op.nombre }}? Se cerraran sus sesiones.')">
-                    Restablecer clave
-                  </button>
-                </form>
+                <button type="button" class="btn-fila" data-abrir-restablecer
+                        data-accion="/administradores/{{ op.id }}/restablecer"
+                        data-nombre="{{ op.nombre }}">
+                  Restablecer clave
+                </button>
 
                 {% if op.id != current_user.id %}
                 <form class="accion-form" method="post" action="/administradores/{{ op.id }}/alternar">
                   <input type="hidden" name="activo" value="{{ '0' if op.activo else '1' }}">
                   {% if op.activo %}
                   <button type="submit" class="btn-fila peligro"
-                          onclick="return confirm('Desactivar a {{ op.nombre }}? Perdera el acceso de inmediato; su historial se conserva.')">
+                          data-confirmar="Desactivar a {{ op.nombre }}? Perdera el acceso de inmediato; su historial se conserva.">
                     Desactivar
                   </button>
                   {% else %}
                   <button type="submit" class="btn-fila activo"
-                          onclick="return confirm('Reactivar la cuenta de {{ op.nombre }}?')">
+                          data-confirmar="Reactivar la cuenta de {{ op.nombre }}?">
                     Activar cuenta
                   </button>
                   {% endif %}
@@ -183,6 +182,42 @@
       </div>
       <button type="submit" class="btn btn-primario">Crear usuario</button>
     </form>
+  </div>
+
+  <!-- Modal "Restablecer clave": se abre desde lm.js, nunca con script inline
+       (la CSP solo permite /static/lm.js). El servidor exige la contrasena
+       nueva: sin este campo la peticion se rechaza. -->
+  <div class="modal-cuenta oculto" data-modal-restablecer>
+    <div class="modal-caja">
+      <div class="modal-cabecera">
+        <h2>Restablecer contrasena</h2>
+        <button type="button" class="modal-cerrar" data-cerrar-restablecer aria-label="Cerrar">✕</button>
+      </div>
+
+      <form method="post" class="form-cuenta" data-form-restablecer>
+        <div class="campo">
+          <label for="restablecer_cuenta">Cuenta</label>
+          <input type="text" id="restablecer_cuenta" readonly
+                 data-campo-nombre style="background:var(--blanco-frio)">
+        </div>
+        <div class="campo">
+          <label for="restablecer_clave">Contrasena nueva *</label>
+          <input type="password" id="restablecer_clave" name="password" required
+                 minlength="10" autocomplete="new-password" data-campo-clave>
+          <p class="pista">Minimo 10 caracteres.</p>
+        </div>
+        <div class="campo">
+          <label for="restablecer_clave2">Repetir contrasena nueva *</label>
+          <input type="password" id="restablecer_clave2" required
+                 minlength="10" autocomplete="new-password" data-campo-clave2>
+          <p class="pista">Se cierran todas las sesiones de esa cuenta.</p>
+        </div>
+        <div class="modal-acciones">
+          <button type="button" class="btn btn-secundario" data-cerrar-restablecer>Cancelar</button>
+          <button type="submit" class="btn btn-primario">Restablecer clave</button>
+        </div>
+      </form>
+    </div>
   </div>
   {% endif %}
 

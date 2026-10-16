@@ -574,6 +574,66 @@ def test_el_email_del_operador_desactivado_queda_congelado_en_auditoria(client, 
     assert verify_chain(db_session).ok
 
 
+# --------------------------------------------------------------------------- #
+# 6. La pantalla permite de verdad restablecer la clave (bug corregido)
+# --------------------------------------------------------------------------- #
+#
+# El formulario de la tabla no llevaba el campo de contrasena que el servidor
+# exige, asi que pulsar «Restablecer clave» devolvia un 422 con JSON crudo.
+
+
+def test_la_pantalla_pide_la_contrasena_nueva_para_restablecer(client, db_session):
+    _alta_admin(db_session)
+    crear_titular(db_session)
+    iniciar_sesion(client, "titular@frubber.co", CLAVE_TITULAR)
+
+    cuerpo = client.get("/administradores").text
+
+    # El modal trae el campo con el nombre exacto que el endpoint espera.
+    assert "data-modal-restablecer" in cuerpo
+    assert 'name="password"' in cuerpo
+    assert "data-abrir-restablecer" in cuerpo
+    assert "/restablecer" in cuerpo
+
+
+def test_el_modal_de_restablecer_apunta_a_la_cuenta_correcta(client, db_session):
+    admin = _alta_admin(db_session)
+    crear_titular(db_session)
+    iniciar_sesion(client, "titular@frubber.co", CLAVE_TITULAR)
+
+    cuerpo = client.get("/administradores").text
+
+    assert f'data-accion="/administradores/{admin.id}/restablecer"' in cuerpo
+
+
+def test_restablecer_sin_contrasena_no_devuelve_json_crudo(client, db_session):
+    """Un formulario incompleto vuelve con un aviso, no con JSON de FastAPI."""
+    admin = _alta_admin(db_session)
+    crear_titular(db_session)
+    iniciar_sesion(client, "titular@frubber.co", CLAVE_TITULAR)
+
+    respuesta = client.post(
+        f"/administradores/{admin.id}/restablecer",
+        data={},
+        headers={"referer": "http://testserver/administradores"},
+        follow_redirects=False,
+    )
+
+    assert respuesta.status_code == 303
+    assert "Faltan datos obligatorios" in _ubicacion(respuesta)
+    assert "password" in _ubicacion(respuesta)
+    assert respuesta.text == ""
+
+
+def test_el_endpoint_de_api_sigue_devolviendo_json_al_validar(client, db_session):
+    """La red de seguridad no cambia el contrato de la API."""
+    respuesta = client.post(
+        "/api/auditoria/verificar", json={"sobra": True}, follow_redirects=False
+    )
+
+    assert respuesta.status_code in (200, 422)
+
+
 def test_las_operaciones_de_cuentas_quedan_auditadas(client, db_session):
     crear_titular(db_session)
     iniciar_sesion(client, "titular@frubber.co", CLAVE_TITULAR)
