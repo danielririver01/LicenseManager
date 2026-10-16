@@ -1,0 +1,146 @@
+﻿{% extends "base.html" %}
+{% block titulo %}Emitir licencia · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  <div class="migas">
+    <a href="/equipos">Equipos y licencias</a>
+    <span>&rsaquo;</span>
+    <span>Emitir nueva licencia</span>
+  </div>
+
+  <div class="encabezado-pantalla">
+    <div>
+      <h1 class="titulo">Emitir licencia Frubber POS</h1>
+      <p class="subtitulo">
+        Pega el codigo de equipo que genera el TPV, registra el tipo de
+        operacion y firma la licencia FRB1 para entregarla al tecnico.
+      </p>
+    </div>
+  </div>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  {% if not firma_disponible %}
+  <div class="alerta alerta-aviso">
+    <strong>La llave de firma no esta disponible en el servidor.</strong>
+    Puedes navegar y registrar clientes y equipos, pero nadie podra firmar
+    licencias hasta que el Titular Principal cargue la llave privada. Tu
+    formulario no se enviara.
+  </div>
+  {% endif %}
+
+  {% if resultado %}
+  <div class="tarjeta" style="margin-bottom:20px">
+    <h2>Licencia firmada</h2>
+
+    <div class="pares">
+      <div class="par">
+        <span class="par-etiqueta">Equipo</span>
+        <span class="codigo-hardware grande">{{ format_hardware_code(resultado.equipo.hardware_code) }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Tipo de emision</span>
+        <span class="par-valor">{{ resultado.tipo_emision }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Fecha de emision</span>
+        <span class="par-valor">{{ resultado.emitida_fecha.strftime('%d/%m/%Y') }}</span>
+      </div>
+      <div class="par">
+        <span class="par-etiqueta">Importe registrado</span>
+        <span class="par-valor" style="font-size:16px">{{ format_cop(resultado.ingresos[0].monto_cop) if resultado.ingresos else '$0 COP' }}</span>
+      </div>
+    </div>
+
+    <div class="bloque-licencia">
+      <div class="bloque-licencia-cabecera">
+        <span class="bloque-licencia-titulo">Bloque de activacion (FRB1)</span>
+        <button type="button" class="enlace-copiar" data-copiar="texto-licencia">
+          Copiar texto
+        </button>
+      </div>
+      <pre id="texto-licencia" class="texto-licencia">{{ resultado.licencia_text }}</pre>
+      <p class="bloque-licencia-pie">
+        Este texto se introduce una sola vez en el TPV de la verduleria. Frubber
+        POS lo valida con su llave publica embebida y se activa para siempre,
+        sin internet.
+      </p>
+    </div>
+
+    <p style="margin-top:16px">
+      <a class="btn btn-secundario" href="/equipos/{{ resultado.equipo.id }}">
+        Abrir la ficha de este equipo
+      </a>
+      <a class="btn btn-secundario" href="/emitir">Emitir otra licencia</a>
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="tarjeta">
+    <h2>Datos de la emision</h2>
+
+    {% if not equipos %}
+    <div class="aviso-reglas">
+      <strong>Todavia no hay equipos en el inventario.</strong> Primero
+      <a href="/equipos#alta-equipo">registra el equipo con su codigo de
+      hardware</a> y despues vuelve aqui a firmar la licencia.
+    </div>
+    {% else %}
+
+    <form method="post" action="/emitir">
+      <div class="form-grid">
+        <div class="campo">
+          <label for="equipo_id">Equipo (codigo de hardware) *</label>
+          <select id="equipo_id" name="equipo_id" required>
+            <option value="" {{ 'selected' if not equipo_previo else '' }}>&mdash; Elige el equipo &mdash;</option>
+            {% for e in equipos %}
+            <option value="{{ e.id }}" {{ 'selected' if equipo_previo and e.id == equipo_previo.id else '' }}
+                    {{ 'disabled' if e.tiene_licencia else '' }}>
+              {{ e.etiqueta }}{% if e.cliente_nombre %} &middot; {{ e.cliente_nombre }}{% endif %}{% if e.tiene_licencia %} &middot; ya tiene licencia vigente{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+          <p class="pista">
+            El codigo aparece en el TPV de la verduleria. Si el equipo que
+            buscas no esta, <a href="/equipos#alta-equipo">registralo primero</a>.
+          </p>
+        </div>
+
+        <div class="campo">
+          <label for="tipo">Tipo de licencia *</label>
+          <select id="tipo" name="tipo" required>
+            {% for t in tipos %}
+            <option value="{{ t.valor }}" {{ 'selected' if loop.first else '' }}>{{ t.etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="campo">
+          <label for="importe">Importe cobrado (COP)</label>
+          <input type="text" id="importe" name="importe" inputmode="numeric"
+                 placeholder="{{ '{:,}'.format(precio_venta).replace(',', '.') }}" autocomplete="off">
+          <p class="pista">
+            Precio de referencia: {{ format_cop(precio_venta) }}. Solo aplica a
+            la venta estandar; prueba, reemplazo y cortesia quedan en $0.
+            Escribe pesos enteros, sin centavos.
+          </p>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primario" {% if not firma_disponible %}disabled{% endif %}>
+        Firmar licencia
+      </button>
+      <p class="pista" style="margin-top:10px">
+        La firma se hace en el servidor con la llave privada ECDSA P-256. La
+        licencia queda registrada como vitalicia para esa maquina y el ingreso
+        se anota automaticamente en COP.
+      </p>
+    </form>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

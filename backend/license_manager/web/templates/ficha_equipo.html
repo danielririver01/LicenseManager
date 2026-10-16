@@ -40,8 +40,12 @@
       <button type="button" class="btn btn-secundario" data-copiar="texto-licencia">
         Copiar licencia
       </button>
+      {% else %}
+      <a class="btn btn-primario" href="/emitir?equipo={{ ficha.equipo.id }}">
+        Emitir licencia para este equipo
+      </a>
       {% endif %}
-      <button type="button" class="btn btn-primario" disabled
+      <button type="button" class="btn btn-secundario" disabled
               title="Se habilita con el modulo de Ingresos y Cobros">
         Gestionar cobro
       </button>

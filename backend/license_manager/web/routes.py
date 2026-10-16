@@ -49,6 +49,19 @@ from license_manager.services.directory import (
     load_equipment_file,
     set_customer_active,
 )
+from license_manager.services.licencias import (
+    MOTIVO_VIGENTE,
+    PRECIO_VENTA_COP,
+    TIPOS_EMISION,
+    EmissionError,
+    diagnosticar_codigo,
+    emit_license,
+    licencia_resultado,
+    listar_clientes_activos,
+    parse_importe_cop,
+    preparar_equipo_para_emision,
+    tipo_emision_por,
+)
 from license_manager.services.users import (
     UserManagementError,
     change_own_password,
@@ -547,8 +560,12 @@ def _volver(destino: str, aviso: str | None = None, error: str | None = None) ->
         params.append(f"aviso={quote(aviso)}")
     if error:
         params.append(f"error={quote(error)}")
-    sufijo = ("?" + "&".join(params)) if params else ""
-    return RedirectResponse(f"{destino}{sufijo}", status_code=303)
+    if not params:
+        return RedirectResponse(destino, status_code=303)
+    # El destino puede traer sus propios parametros (/emitir?licencia=...):
+    # ahi se concatena con & para no romper la cadena de consulta.
+    separador = "&" if "?" in destino else "?"
+    return RedirectResponse(f"{destino}{separador}{'&'.join(params)}", status_code=303)
 
 
 @pages_router.get("/clientes", response_class=HTMLResponse)
@@ -794,4 +811,128 @@ def vincular_equipo(
     return _volver(
         f"/equipos/{equipment_id}",
         aviso="Equipo sin verduleria asignada. Su historial se conserva completo.",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Emision de licencias FRB1 (UI-05, JHO-101)
+# --------------------------------------------------------------------------- #
+#
+# Los tres roles pueden emitir (doc 04 v2.1, seccion 7). La llave privada vive
+# solo en el proceso del backend: la pantalla recibe el texto firmado, nunca
+# la llave.
+
+
+def _equipo_elegido(db: Session, equipo_id: str) -> Equipment | None:
+    return db.get(Equipment, equipo_id) if equipo_id else None
+
+
+@pages_router.get("/emitir", response_class=HTMLResponse)
+def emitir_page(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    equipo: str = "",
+    licencia: str = "",
+):
+    """UI-05 · formulario de emision. Arranca siempre con campos limpios."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    resultado = None
+    if licencia:
+        resultado = licencia_resultado(db, licencia)
+        if resultado is None:
+            return _volver("/emitir", error="La licencia indicada no existe.")
+
+    equipo_previo = _equipo_elegido(db, equipo)
+    if equipo and equipo_previo is None:
+        return _volver("/emitir", error="El equipo indicado no existe.")
+
+    return _render(
+        request,
+        "emitir.html",
+        {
+            "seccion": "equipos",
+            "tipos": TIPOS_EMISION,
+            "equipos": listar_equipos_disponibles(db),
+            "equipo_previo": equipo_previo,
+            "resultado": resultado,
+            "precio_venta": PRECIO_VENTA_COP,
+            "format_cop": format_cop,
+            "format_hardware_code": format_hardware_code,
+            "firma_disponible": state.signing_key is not None,
+            "aviso": request.query_params.get("aviso"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@pages_router.post("/emitir")
+def emitir_submit(
+    request: Request,
+    equipo_id: str = Form(""),
+    tipo: str = Form(""),
+    importe: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-05 · firma la licencia y registra el ingreso de la emision."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    equipo = _equipo_elegido(db, equipo_id)
+    if equipo is None:
+        return _volver("/emitir", error="Selecciona el equipo al que corresponde la licencia.")
+
+    if tipo_emision_por(tipo) is None:
+        return _volver(f"/emitir?equipo={equipo.id}", error="Elige un tipo de licencia valido.")
+
+    if state.signing_key is None:
+        return _volver(
+            f"/emitir?equipo={equipo.id}",
+            error=(
+                "La llave de firma no esta disponible en el servidor. "
+                "No es posible emitir licencias hasta configurarla."
+            ),
+        )
+
+    try:
+        importe_cop = None if tipo_emision_por(tipo).es_pagable else 0
+        if importe_cop is None:
+            importe_cop = parse_importe_cop(importe)
+        licencia = emit_license(
+            db,
+            actor_id=user.id,
+            signing_key=state.signing_key,
+            equipo=equipo,
+            tipo=tipo,
+            importe_cop=importe_cop,
+        )
+    except EmissionError as exc:
+        db.rollback()
+        return _volver(f"/emitir?equipo={equipo.id}", error=str(exc))
+
+    cliente = db.get(Customer, equipo.cliente_id) if equipo.cliente_id else None
+    record_event(
+        db,
+        action="licencia.emitida",
+        user=user,
+        entity_type="licencia",
+        entity_id=licencia.id,
+        # En la auditoria NO va el texto FRB1: van los datos contables del
+        # evento. La cadena firmada vive en la tabla de licencias.
+        detail={
+            "tipo_emision": licencia.tipo_emision,
+            "key_id": licencia.key_id,
+            "hardware_code": equipo.hardware_code,
+            "cliente_id": equipo.cliente_id,
+            "cliente_nombre": cliente.nombre if cliente else None,
+        },
+    )
+    db.commit()
+
+    return _volver(
+        f"/emitir?licencia={licencia.id}",
+        aviso="Licencia firmada. Copia el bloque de activacion y entregalo al tecnico.",
     )
