@@ -1,0 +1,29 @@
+[Unit]
+Description=Respaldo verificado de la base de License Manager
+Documentation=file:/opt/license-manager/deploy/README.md
+After=network-online.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=oneshot
+User=license-manager
+Group=license-manager
+WorkingDirectory=/opt/license-manager/backend
+EnvironmentFile=/etc/license-manager/license-manager.env
+# --verify obliga a que el respaldo se pueda ABRIR y a que la cadena de
+# auditoria este sana dentro de la copia. Sin eso, no hay respaldo.
+ExecStart=/opt/license-manager/.venv/bin/python -m license_manager.tools.backup --verify
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+ReadWritePaths=/var/backups/license-manager

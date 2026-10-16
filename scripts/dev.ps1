@@ -20,4 +20,4 @@ $env:LM_COOKIE_SECURE = "false"
 $env:LM_SESSION_SECRET = "dev-secret-cambiar"
 $env:LM_ENVIRONMENT = "development"
 
-& $python -m uvicorn license_manager.app:app --host 127.0.0.1 --port 8899 --app-dir (Join-Path $raiz "backend") --reload
+& $python -m uvicorn license_manager.app:create_app --factory --host 127.0.0.1 --port 8899 --app-dir (Join-Path $raiz "backend") --reload

@@ -81,6 +81,68 @@ def test_no_hay_documentacion_publica_de_la_api(client):
 
 
 # --------------------------------------------------------------------------- #
+# Configuracion de produccion (JHO-106): el arranque del VPS
+# --------------------------------------------------------------------------- #
+
+
+def _app_de_produccion(settings: Settings, tmp_path):  # noqa: ANN001 - fixture reutilizado
+    """Levanta la app con el endurecimiento del servidor real."""
+    from fastapi.testclient import TestClient
+
+    from license_manager.app import create_app
+
+    produccion = Settings(
+        _env_file=None,
+        environment="production",
+        database_url=f"sqlite:///{tmp_path / 'produccion.db'}",
+        session_secret="produccion-secreto-largo-y-aleatorio",
+        cookie_secure=True,
+        enable_hsts=True,
+        trusted_hosts="license-manager.frubber.co",
+    )
+    return TestClient(create_app(produccion))
+
+
+def test_la_configuracion_de_produccion_endurece_cookies_y_hosts(settings, tmp_path):
+    with _app_de_produccion(settings, tmp_path) as cliente:
+        alta = cliente.post(
+            "/configurar",
+            data={
+                "nombre": "Daniel Rivera",
+                "email": "daniel@frubber.co",
+                "password": "clave-muy-segura-1",
+                "password_confirm": "clave-muy-segura-1",
+            },
+            headers={"host": "license-manager.frubber.co"},
+            follow_redirects=False,
+        )
+        assert alta.status_code == 303
+
+        # La cookie de sesion solo viaja por HTTPS y no es leible por JS.
+        cookie = alta.headers.get("set-cookie", "")
+        assert "Secure" in cookie
+        assert "HttpOnly" in cookie
+
+        # HSTS se emite al ir detras de TLS.
+        pagina = cliente.get(
+            "/login",
+            headers={"host": "license-manager.frubber.co", "x-forwarded-proto": "https"},
+        )
+        assert pagina.headers["Strict-Transport-Security"].startswith("max-age=")
+
+        # Y un Host ajeno no llega ni a la primera ruta.
+        ajeno = cliente.get("/login", headers={"host": "sitio-clonado.example"})
+        assert ajeno.status_code == 400
+
+
+def test_en_desarrollo_el_host_no_se_limita(client):
+    """Con LM_TRUSTED_HOSTS=* (desarrollo) la app no rechaza ningun Host."""
+    respuesta = client.get("/login", headers={"host": "127.0.0.1:8899"})
+
+    assert respuesta.status_code == 200
+
+
+# --------------------------------------------------------------------------- #
 # La llave privada jamas sale del servidor
 # --------------------------------------------------------------------------- #
 

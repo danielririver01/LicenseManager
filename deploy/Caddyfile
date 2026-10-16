@@ -1,0 +1,50 @@
+# Caddy como terminador TLS de License Manager (JHO-106).
+#
+# Caddy pide y renueva el certificado de Let's Encrypt SOLO con esto: no hay
+# que tocar certbot ni cron. El backend queda en 127.0.0.1:8899 y nunca se
+# expone directo a internet.
+#
+# 1) Edita el dominio de abajo.
+# 2) sudo cp deploy/Caddyfile /etc/caddy/Caddyfile
+# 3) sudo systemctl reload caddy
+#
+# Con esto, en el entorno del servicio pon LM_ENABLE_HSTS=true y
+# LM_COOKIE_SECURE=true.
+
+# Redirige el trafico sin www al dominio real.
+www.license-manager.tu-dominio.com {
+	redir https://license-manager.tu-dominio.com{uri} permanent
+}
+
+license-manager.tu-dominio.com {
+	encode zstd gzip
+
+	# HSTS lo emite tambien la app cuando LM_ENABLE_HSTS=true; aqui se refuerza
+	# para las respuestas que devuelve Caddy antes de llegar al backend.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+
+	# Nada de listar archivos ni servir el .env si alguien lo deja mal ubicado.
+	file_server {
+		hide .env
+	}
+
+	reverse_proxy 127.0.0.1:8899 {
+		header_up X-Real-IP {remote_host}
+		# El backend ya aplica sus propias cabeceras de seguridad.
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	# Registro de accesos para la auditoria del servidor web.
+	log {
+		output file /var/log/caddy/license-manager.log {
+			roll_size 20MiB
+			roll_keep 10
+		}
+	}
+}

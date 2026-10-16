@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     dias_gracia: int = 3
     # Dia 31 cobro pendiente + gracia hasta el dia 34 vencida.
 
+    # --- Respaldos automatizados (JHO-106) -----------------------------------
+    # Valores por defecto de la herramienta de respaldo; las banderas de la
+    # linea de comandos los sobrescriben.
+    backup_dir: str = "./backups"
+    backup_keep: int = 14
+    backup_upload: str | None = None
+
 
 @lru_cache
 def get_settings() -> Settings:

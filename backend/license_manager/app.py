@@ -14,6 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from license_manager.config import get_settings
 from license_manager.db import Base, create_session_factory
@@ -48,6 +49,12 @@ def create_app(settings=None) -> FastAPI:  # noqa: ANN001 - Settings opcional
     )
 
     app.add_middleware(SecurityHeadersMiddleware, settings=settings)
+    # Produccion: solo el dominio real puede pedir el sitio. Un Host ajeno
+    # (ataque de cabecera Host contra cookies o enlaces) se rechaza antes de
+    # llegar a cualquier ruta. En desarrollo queda "*" y no se monta nada.
+    permitidos = [host.strip() for host in settings.trusted_hosts.split(",") if host.strip()]
+    if permitidos and permitidos != ["*"]:
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=permitidos)
     app.state.settings = settings
 
     _mount_static(app)

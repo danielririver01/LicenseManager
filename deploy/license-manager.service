@@ -1,0 +1,46 @@
+[Unit]
+Description=License Manager de Frubber POS (API web privada)
+Documentation=file:/opt/license-manager/deploy/README.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=simple
+User=license-manager
+Group=license-manager
+WorkingDirectory=/opt/license-manager/backend
+EnvironmentFile=/etc/license-manager/license-manager.env
+ExecStart=/opt/license-manager/.venv/bin/python -m uvicorn license_manager.app:create_app --factory --host 127.0.0.1 --port 8899
+Restart=always
+RestartSec=3
+# Un fallo de firma no debe reiniciar el sitio en bucle sin dejar rastro.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=license-manager
+
+# --- Endurecimiento (defensa en profundidad) --------------------------------
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+# La llave privada se lee; la base y los respaldos se escriben.
+ReadWritePaths=/var/lib/license-manager /var/backups/license-manager
+
+[Install]
+WantedBy=multi-user.target

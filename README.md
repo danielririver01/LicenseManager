@@ -71,6 +71,10 @@ creas la cuenta del Titular Principal.
 
 ## 4. Configuración en el servidor
 
+Para poner el sitio en un VPS (systemd, HTTPS con Caddy, respaldos diarios) el
+runbook completo es **`deploy/README.md`** y el instalador
+`deploy/install.sh`. Lo de abajo es la referencia de variables.
+
 Copia `backend/.env.example` y completa:
 
 | Variable | Qué es |
@@ -107,10 +111,17 @@ cd LicenseManager\backend
 ..\.venv\Scripts\python.exe -m pytest -q
 ```
 
-La suite incluye **pruebas de interoperabilidad con el POS**: compilan y
-ejecutan el verificador C# real de Frubber POS
-(`EcdsaLicenseSignatureVerifier`) sobre licencias firmadas por Python. Si
-alguien cambia el formato en el POS, esas pruebas se rompen de inmediato.
+La suite incluye:
+
+* **Interoperabilidad con el POS**: compila y ejecuta el verificador C# real
+  de Frubber POS (`EcdsaLicenseSignatureVerifier`) sobre licencias firmadas por
+  Python. Si alguien cambia el formato en el POS, esas pruebas se rompen.
+* **Pruebas integrales E2E** (`test_e2e_flujo.py`): recorren el negocio
+  completo por HTTP —primer arranque, emisión firmada, paquetes mayoristas,
+  cobros, cierre contable, liquidación, auditoría y respaldo— y comprueban que
+  las cifras cuadran entre módulos.
+* **Respaldo verificado** (`test_backup.py`): la copia se abre, conserva la
+  cadena de auditoría, se restaura y la rotación no deja firmas huérfanas.
 
 Para apuntar a otra copia del POS:
 
@@ -120,7 +131,25 @@ $env:FRUBBER_POS_SRC = "C:\ruta\a\Frutter POS\src"
 
 ---
 
-## 6. Estructura
+## 6. Respaldos
+
+```powershell
+cd LicenseManager\backend
+..\.venv\Scripts\python.exe -m license_manager.tools.backup --verify
+```
+
+Copia la base (API de respaldo de SQLite o `pg_dump`), la comprime, deja su
+`.sha256` al lado, **verifica** que se pueda abrir y que la cadena de auditoría
+esté sana dentro de la copia, y rota los respaldos viejos (14 por defecto).
+La configuración sale del entorno: `LM_BACKUP_DIR`, `LM_BACKUP_KEEP` y
+`LM_BACKUP_UPLOAD` (para subir a B2/S3 con `rclone`).
+
+En el servidor corre solo con el temporizador de systemd
+(`deploy/license-manager-backup.timer`, todos los días a las 03:30 UTC).
+
+---
+
+## 7. Estructura
 
 ```
 backend/
@@ -140,33 +169,50 @@ backend/
       sessions.py       Cookies HttpOnly firmadas + revocación en BD
     services/
       audit.py          Auditoría append-only encadenada por hash
+      historial.py      Lectura del historial (UI-08)
+      cierres.py        Cierre contable mensual (UI-07B)
+      liquidaciones.py  Reparto de utilidades (UI-11)
+      mayorista.py      Paquetes prepago y saldo de cupos (UI-10)
+    tools/
+      genkey.py         Genera el par ECDSA
+      backup.py         Respaldo verificado con rotación (JHO-106)
     web/
       routes.py         Páginas y API
       templates/        Jinja2 con los tokens de la maqueta del dueño
       static/           CSS propio, sin CDNs
-  migrations/sql/       Scripts específicos de PostgreSQL
-  tests/                Suite, incluida la interop con el POS
+  migrations/sql/       Scripts específicos de PostgreSQL (trigger de auditoría)
+  tests/                Suite, incluida la interop con el POS y el E2E
+
+deploy/                 VPS: systemd, Caddy (HTTPS), instalador y runbook
+docs/                   Manual de operación y contingencia
+scripts/                Arranque local en Windows
 ```
 
 ---
 
-## 7. Decisiones tomadas
+## 8. Decisiones tomadas
 
 | Tema | Decisión | Por qué |
 | --- | --- | --- |
 | Stack | Python + FastAPI + SQLAlchemy | Elegido por el dueño (2026-10-15) |
 | Base de datos | PostgreSQL en producción, SQLite en desarrollo | Mismo esquema, sin instalar nada para trabajar |
-| Hosting | VPS Cloud con HTTPS | Docs 04 v2.0 y 01 LM-RF-001 (15 oct) mandan sobre los del 14 oct |
+| Hosting | VPS Cloud con HTTPS (Caddy + Let's Encrypt) | Docs 04 v2.0 y 01 LM-RF-001 (15 oct) mandan sobre los del 14 oct |
 | Interfaz | Jinja2 server-side, CSS propio | Una sola pieza desplegable y usable desde el celular |
 | Contraseñas | Argon2id | Lo pide JHO-98; es el estándar actual |
-| Auditoría | Append-only + cadena de hash | Detecta manipulación aunque alguien toque la BD por SSH |
+| Auditoría | Append-only + cadena de hash + trigger en PostgreSQL | Detecta manipulación aunque alguien toque la BD por SSH |
+| Respaldos | Diarios, comprimidos, con sha256 y **verificados** | Un respaldo que no se abre no es un respaldo |
+| Despliegue | systemd endurecido + Caddy, sin exponer el backend | El 8899 nunca sale a internet |
 
 ---
 
-## 8. Pendiente
+## 9. Pendiente
 
-* **JHO-100** clientes y equipos · **JHO-101** pantalla de emisión
-* **JHO-102** ingresos y ciclo de prueba · **JHO-103** liquidaciones
-* **JHO-104** paquetes mayoristas · **JHO-106** despliegue y respaldos
-* Falta el trigger de PostgreSQL en entornos reales y la migración inicial con
-  Alembic; hoy el esquema se crea con `Base.metadata.create_all`.
+* **Migraciones con Alembic**: hoy el esquema se crea con
+  `Base.metadata.create_all` (idempotente) y el trigger de auditoría se aplica
+  al arrancar. Funciona para instalaciones nuevas; para evolucionar columnas
+  hará falta Alembic.
+* **Verificación final en campo**: probar la activación de una licencia en un
+  POS real con la balanza conectada (requiere el hardware; el contrato con el
+  POS ya está cubierto por la prueba de interoperabilidad en C#).
+* **Puesta en producción**: el VPS, el dominio y la carga de la llave privada
+  son acciones del Titular; el runbook está en `deploy/README.md`.
