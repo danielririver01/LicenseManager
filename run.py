@@ -20,11 +20,15 @@ respetan: este archivo solo rellena lo que falte.
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import subprocess
 import sys
 import threading
+import time
 import webbrowser
 from pathlib import Path
+from urllib.request import urlopen
 
 RAIZ = Path(__file__).resolve().parent
 BACKEND = RAIZ / "backend"
@@ -60,6 +64,105 @@ def _abrir_navegador(url: str) -> None:
     threading.Timer(1.5, lambda: webbrowser.open(url)).start()
 
 
+def _pid_escuchando(puerto: int) -> int | None:
+    """PID que tiene el puerto en escucha, si hay alguno."""
+    if sys.platform.startswith("win"):
+        salida = subprocess.run(
+            ["netstat", "-ano", "-p", "tcp"], check=False, capture_output=True, text=True
+        ).stdout
+        for linea in salida.splitlines():
+            partes = linea.split()
+            if (
+                len(partes) >= 5
+                and partes[0].upper() == "TCP"
+                and partes[3] == "LISTENING"
+                and partes[1].endswith(f":{puerto}")
+            ):
+                try:
+                    return int(partes[4])
+                except ValueError:
+                    return None
+        return None
+
+    resultado = subprocess.run(
+        ["lsof", "-ti", f"tcp:{puerto}"], check=False, capture_output=True, text=True
+    )
+    linea = resultado.stdout.strip().splitlines()
+    return int(linea[0]) if linea and linea[0].isdigit() else None
+
+
+def _es_nuestro_servidor(puerto: int) -> bool:
+    """Pregunta al puerto si quien responde es esta misma aplicacion.
+
+    Es mas fiable que mirar la linea de comandos: el proceso que arranca
+    ``run.py`` puede no llevar la ruta del proyecto en sus argumentos. La
+    respuesta de ``/api/salud`` es inconfundible (``estado`` + ``firma_disponible``).
+    """
+    try:
+        with urlopen(f"http://127.0.0.1:{puerto}/api/salud", timeout=2) as respuesta:
+            datos = json.loads(respuesta.read().decode("utf-8"))
+        return "estado" in datos and "firma_disponible" in datos
+    except (OSError, ValueError):
+        return False
+
+
+def _linea_de_comando(pid: int) -> str:
+    if sys.platform.startswith("win"):
+        resultado = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                f"(Get-CimInstance Win32_Process -Filter 'ProcessId = {pid}').CommandLine",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return resultado.stdout.strip()
+    try:
+        crudo = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return ""
+    return crudo.replace(b"\x00", b" ").decode("utf-8", "replace").strip()
+
+
+def _liberar_puerto(puerto: int) -> None:
+    """Cierra un servidor ANTERIOR de este proyecto que tenga el puerto.
+
+    Sin esto, en Windows el segundo arranque no puede tomar el puerto y el viejo
+    sigue respondiendo con codigo ya desactualizado: la pantalla falla por algo
+    que en el codigo nuevo ya esta arreglado, y parece un fallo fantasma.
+    """
+    pid = _pid_escuchando(puerto)
+    if pid is None:
+        return
+
+    linea = _linea_de_comando(pid)
+    nuestro = _es_nuestro_servidor(puerto) or any(
+        marca in linea for marca in ("LicenseManager", "license_manager", "run.py")
+    )
+    if not nuestro:
+        print(f"El puerto {puerto} lo ocupa otro programa (PID {pid}):")
+        print(f"  {linea[:140] or 'sin detalle'}")
+        print(f"Cierralo, o arranca en otro puerto con  --puerto {puerto + 1}")
+        raise SystemExit(1)
+
+    print(f"Cerrando el servidor anterior de License Manager (PID {pid})...")
+    if sys.platform.startswith("win"):
+        # /T mata tambien a los hijos del recargador: si no, quedan huerfanos.
+        subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"], check=False, capture_output=True, text=True
+        )
+    else:
+        subprocess.run(["kill", "-TERM", str(pid)], check=False, capture_output=True, text=True)
+    time.sleep(1.2)
+
+    if _pid_escuchando(puerto) is not None:
+        print(f"El puerto {puerto} sigue ocupado. Cierra la otra ventana y vuelve a intentar.")
+        raise SystemExit(1)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Arranca License Manager en local.")
     parser.add_argument("--puerto", type=int, default=int(os.environ.get("LM_PUERTO", "8899")))
@@ -73,6 +176,10 @@ def main() -> int:
     args = parser.parse_args()
 
     llave, es_real = _llave_de_firma()
+
+    # Un servidor anterior en el mismo puerto seguiria respondiendo con codigo
+    # viejo: se cierra antes de arrancar.
+    _liberar_puerto(args.puerto)
 
     # Solo rellena lo que falte: si el entorno ya lo define, manda el entorno.
     os.environ.setdefault("LM_ECDSA_PRIVATE_KEY_FILE", str(llave))
