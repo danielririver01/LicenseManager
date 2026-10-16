@@ -60,12 +60,19 @@ cd LicenseManager
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e "backend[dev]"
 
-# 2. Arrancar (crea SQLite y una llave de desarrollo la primera vez)
-.\scripts\dev.ps1
+# 2. Arrancar
+.\.venv\Scripts\python.exe run.py
 ```
 
-Abre <http://127.0.0.1:8899>. La primera vez te lleva a **Primer inicio**, donde
-creas la cuenta del Titular Principal.
+`run.py` crea la SQLite y la llave de desarrollo la primera vez, abre el
+navegador y sirve en <http://127.0.0.1:8899>. Si existe `backend\llave-pos.pem`
+(la llave real de Frubber POS) la usa en lugar de la de desarrollo y lo avisa;
+así lo que pruebas en local firma licencias que el POS acepta.
+
+En Windows tienes además `.\scripts\dev.ps1`, que hace lo mismo.
+
+La primera vez te lleva a **Primer inicio**, donde creas la cuenta del Titular
+Principal.
 
 ---
 
