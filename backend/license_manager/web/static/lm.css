@@ -119,6 +119,7 @@ p.subtitulo { color: var(--text-muted); margin-bottom: 28px; }
 .badge-ambar { background: #fffbeb; color: var(--ambar-alerta); border: 1px solid #fde68a; }
 .badge-gris { background: #f1f5f9; color: var(--text-muted); border: 1px solid var(--border-subtle); }
 .badge-azul { background: #eff6ff; color: var(--azul-electrico); border: 1px solid #dbeafe; }
+.badge-rojo { background: #fef2f2; color: var(--rojo-peligro); border: 1px solid #fecaca; }
 
 .pie { text-align: center; color: var(--text-muted); font-size: 12px; padding: 24px; }
 
@@ -331,3 +332,63 @@ p.subtitulo { color: var(--text-muted); margin-bottom: 28px; }
   color: var(--azul-electrico);
 }
 .resumen-ok { color: var(--verde-activo); }
+
+/* --- Ingresos y ciclo de cobro (UI-07 / JHO-102) ------------------------- */
+.barra-filtros-ancha select {
+  background: #fff; border: 1px solid var(--border-subtle);
+  padding: 10px 12px; border-radius: 10px; font-size: 13px; color: var(--text-main);
+}
+.barra-filtros-ancha select:focus {
+  outline: none; border-color: var(--azul-electrico);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+.btn-limpio {
+  font-size: 12px; color: var(--azul-electrico); font-weight: 600;
+  text-decoration: none; white-space: nowrap;
+}
+.btn-limpio:hover { text-decoration: underline; }
+
+.tabla-ingresos { min-width: 940px; }
+.monto-cop {
+  font-variant-numeric: tabular-nums; color: var(--azul-noche); white-space: nowrap;
+}
+.cron {
+  display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 8px;
+  border-radius: 6px; white-space: nowrap;
+}
+.cron-verde { background: #f0fdf4; color: var(--verde-activo); border: 1px solid #bbf7d0; }
+.cron-ambar { background: #fffbeb; color: var(--ambar-alerta); border: 1px solid #fde68a; }
+.cron-rojo { background: #fef2f2; color: var(--rojo-peligro); border: 1px solid #fecaca; }
+.cron-gris { background: #f1f5f9; color: var(--text-muted); border: 1px solid var(--border-subtle); }
+
+/* Modal "Actualizar estado de cuenta": se abre desde lm.js, nunca con script
+   inline. El servidor solo lo deja visible cuando hay que reabrirlo tras un
+   rechazo. */
+.modal-cuenta {
+  position: fixed; inset: 0; z-index: 400;
+  background: rgba(16, 24, 40, 0.6);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+/* Gana a ``.oculto`` (mismo especificidad, pero declarado antes): sin esta
+   regla el modal taparia la pantalla aunque lleve la clase ``oculto``. */
+.modal-cuenta.oculto { display: none; }
+.modal-caja {
+  background: #fff; border: 1px solid var(--border-subtle); border-radius: 14px;
+  width: 100%; max-width: 460px; padding: 24px;
+  box-shadow: 0 20px 30px -12px rgba(16, 24, 40, 0.35);
+  max-height: calc(100vh - 48px); overflow-y: auto;
+}
+.modal-cabecera {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; margin-bottom: 18px;
+}
+.modal-cabecera h2 { font-size: 16px; font-weight: 700; color: var(--azul-noche); }
+.modal-cerrar {
+  background: none; border: none; font-size: 18px; color: var(--text-muted);
+  cursor: pointer; line-height: 1; padding: 4px;
+}
+.modal-cerrar:hover { color: var(--text-main); }
+.modal-acciones {
+  display: flex; justify-content: flex-end; gap: 10px;
+  margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-subtle);
+}

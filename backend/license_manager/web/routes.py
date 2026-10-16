@@ -50,6 +50,22 @@ from license_manager.services.directory import (
     load_equipment_file,
     set_customer_active,
 )
+from license_manager.services.ingresos import (
+    ETIQUETAS_CATEGORIA,
+    ETIQUETAS_ESTADO,
+    IngresoError,
+    cambiar_estado_cuenta,
+    licencia_de,
+    listar_ingresos,
+    listar_operaciones,
+    parse_categoria,
+    parse_estado_pago,
+    parse_metodo,
+    parse_monto,
+    registrar_ingreso,
+    resumen_ingresos,
+    sincronizar_ciclo,
+)
 from license_manager.services.licencias import (
     MOTIVO_INVALIDO,
     MOTIVO_VIGENTE,
@@ -269,6 +285,17 @@ def home(request: Request, db: Session = Depends(get_db_session)):
         or 0
     )
 
+    # El ciclo de prueba tambien se evalua al abrir el panel: un dia 31 o un
+    # dia 34 no pueden esperar a que alguien entre a la pantalla de Ingresos.
+    try:
+        sincronizar_ciclo(db, actor_id=user.id)
+        resumen_cobros = resumen_ingresos(db)
+    except IngresoError:  # pragma: no cover - filtro interno, nunca con defaults
+        db.rollback()
+        resumen_cobros = resumen_ingresos(db)
+    else:
+        db.commit()
+
     return _render(
         request,
         "panel.html",
@@ -276,6 +303,10 @@ def home(request: Request, db: Session = Depends(get_db_session)):
             "total_equipos": total_equipos,
             "total_licencias": total_licencias,
             "ingresos_pagados_cop": ingresos_pagados,
+            "cuentas_pendientes": resumen_cobros.pendientes_n,
+            "cuentas_vencidas": resumen_cobros.vencidas_n,
+            "deuda_vencida_cop": resumen_cobros.deuda_vencida_cop,
+            "format_cop": format_cop,
         },
     )
 
@@ -988,4 +1019,264 @@ def emitir_submit(
     return _volver(
         f"/emitir?licencia={licencia.id}",
         aviso="Licencia firmada. Copia el bloque de activacion y entregalo al tecnico.",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Ingresos manuales y ciclo de cobro (UI-07, JHO-102)
+# --------------------------------------------------------------------------- #
+#
+# Los tres roles consultan y registran ingresos (doc 01, LM-RF-002). El sitio
+# no simula conciliacion bancaria: el pago lo confirma una persona y queda con
+# su usuario, su fecha y su metodo de pago.
+
+
+METODOS_PAGO = (
+    ("efectivo", "Efectivo"),
+    ("nequi", "Nequi"),
+    ("daviplata", "Daviplata"),
+    ("bancolombia", "Bancolombia"),
+    ("otro", "Otro"),
+)
+
+# Estados de cuenta que admite el modal de UI-07 (doc 02, seccion 5.3).
+ESTADOS_CUENTA = (
+    ("pagado", "Pagado — detiene el cronometro y consolida la venta"),
+    ("cobro_pendiente", "Cobro pendiente ($ 450.000 COP) — periodo de gracia"),
+    ("vencida", "Vencida / sin cobro — detiene el cronometro"),
+)
+
+
+def _ingresos_destino(params: dict[str, str] | None = None, **extras: str) -> str:
+    """URL de vuelta a /ingresos conservando lo que el operador escribio."""
+    valores = {k: (v or "") for k, v in (params or {}).items()}
+    valores.update(extras)
+    pares = [f"{clave}={quote(valor, safe='')}" for clave, valor in valores.items() if valor]
+    return "/ingresos" + (f"?{'&'.join(pares)}" if pares else "")
+
+
+@pages_router.get("/ingresos", response_class=HTMLResponse)
+def ingresos_page(
+    request: Request,
+    db: Session = Depends(get_db_session),
+    q: str = "",
+    estado: str = "",
+    categoria: str = "",
+    registrar: str = "",
+    cuenta: str = "",
+    # Campos que un rechazo devuelve al formulario de alta manual.
+    f_categoria: str = "",
+    f_importe: str = "",
+    f_metodo: str = "",
+    f_estado: str = "",
+    f_nota: str = "",
+):
+    """UI-07 · cobros manuales, filtros y ciclo de prueba."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    # Primero el ciclo automatico: lo que paso el dia 31 o el 34 se aplica
+    # antes de pintar cualquier cifra de la pantalla.
+    try:
+        cambios = sincronizar_ciclo(db, actor_id=user.id)
+        filas = listar_ingresos(db, busqueda=q, estado=estado, categoria=categoria)
+        resumen = resumen_ingresos(db)
+    except IngresoError as exc:
+        db.rollback()
+        return _volver("/ingresos", error=str(exc))
+
+    if cambios:
+        db.commit()
+
+    licencia_modal = licencia_de(db, cuenta) if cuenta else None
+    cuenta_datos = None
+    if licencia_modal is not None:
+        equipo_modal = db.get(Equipment, licencia_modal.equipo_id)
+        cliente_modal = (
+            db.get(Customer, equipo_modal.cliente_id)
+            if equipo_modal and equipo_modal.cliente_id
+            else None
+        )
+        cuenta_datos = {
+            "id": licencia_modal.id,
+            "cliente": cliente_modal.nombre if cliente_modal else "Sin verduleria",
+            "codigo": (
+                format_hardware_code(equipo_modal.hardware_code)
+                if equipo_modal
+                else "—"
+            ),
+            "estado": licencia_modal.estado_cobro,
+        }
+
+    return _render(
+        request,
+        "ingresos.html",
+        {
+            "seccion": "ingresos",
+            "filas": filas,
+            "resumen": resumen,
+            "cambios": cambios,
+            "operaciones": listar_operaciones(db),
+            "filtros_estado": list(ETIQUETAS_ESTADO.items()),
+            "filtros_categoria": list(ETIQUETAS_CATEGORIA.items()),
+            "metodos": METODOS_PAGO,
+            "estados_cuenta": ESTADOS_CUENTA,
+            "categorias_alta": list(ETIQUETAS_CATEGORIA.items()),
+            "busqueda": q.strip(),
+            "filtro_estado": estado,
+            "filtro_categoria": categoria,
+            "total": len(filas),
+            # Preservado tras un rechazo del alta manual.
+            "alta_licencia": registrar,
+            "alta_categoria": f_categoria or "venta",
+            "alta_importe": f_importe,
+            "alta_metodo": f_metodo,
+            "alta_estado": f_estado or "pagado",
+            "alta_nota": f_nota,
+            # Cuenta cuyo modal hay que reabrir tras un rechazo.
+            "cuenta_modal": cuenta_datos,
+            "precio_venta": PRECIO_VENTA_COP,
+            "format_cop": format_cop,
+            "format_hardware_code": format_hardware_code,
+            "aviso": request.query_params.get("aviso"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@pages_router.post("/ingresos")
+def ingresos_registrar(
+    request: Request,
+    licencia_id: str = Form(""),
+    categoria: str = Form(""),
+    importe: str = Form(""),
+    metodo: str = Form(""),
+    estado: str = Form(""),
+    nota: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-07 · alta manual de un pago contra una licencia/operacion."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    preservado = {
+        "registrar": licencia_id,
+        "f_categoria": categoria,
+        "f_importe": importe,
+        "f_metodo": metodo,
+        "f_estado": estado,
+        "f_nota": nota,
+    }
+
+    try:
+        cat = parse_categoria(categoria)
+        est = parse_estado_pago(estado)
+        metodo_pago = parse_metodo(metodo)
+        # Para un cobro el importe es obligatorio; las categorias a $0 pueden
+        # enviarse vacias y se registran como 0.
+        monto = parse_monto(
+            importe, requerido=cat not in ("gratuito", "reemplazo")
+        )
+        if monto is None:
+            monto = 0
+
+        ingreso = registrar_ingreso(
+            db,
+            actor_id=user.id,
+            licencia_id=licencia_id,
+            categoria=cat,
+            importe_cop=monto,
+            estado_pago=est,
+            metodo_pago=metodo_pago,
+            nota=nota,
+        )
+    except IngresoError as exc:
+        db.rollback()
+        return _volver(_ingresos_destino(preservado), error=str(exc))
+
+    licencia = db.get(License, ingreso.licencia_id)
+    record_event(
+        db,
+        action="ingreso.registrado",
+        user=user,
+        entity_type="ingreso",
+        entity_id=ingreso.id,
+        # En la auditoria van los datos contables, nunca algo sensible.
+        detail={
+            "licencia_id": ingreso.licencia_id,
+            "categoria": ingreso.categoria,
+            "monto_cop": int(ingreso.monto_cop),
+            "estado_pago": ingreso.estado_pago,
+            "metodo_pago": ingreso.metodo_pago,
+            "estado_cobro": licencia.estado_cobro if licencia else None,
+        },
+    )
+    db.commit()
+
+    return _volver(
+        "/ingresos",
+        aviso=(
+            f"Ingreso de {format_cop(ingreso.monto_cop)} registrado "
+            f"({ingreso.categoria} · {ingreso.estado_pago})."
+        ),
+    )
+
+
+@pages_router.post("/ingresos/{licencia_id}/cuenta")
+def ingresos_cambiar_cuenta(
+    request: Request,
+    licencia_id: str,
+    estado: str = Form(""),
+    importe: str = Form(""),
+    metodo: str = Form(""),
+    nota: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """UI-07 · actualizar la cuenta de una licencia (modal de la tabla)."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return denied
+
+    destino = _ingresos_destino({"cuenta": licencia_id})
+    licencia = licencia_de(db, licencia_id)
+    if licencia is None:
+        return _volver("/ingresos", error="La licencia indicada no existe.")
+
+    try:
+        metodo_pago = parse_metodo(metodo)
+        monto = parse_monto(importe, requerido=False)
+        aplicado = cambiar_estado_cuenta(
+            db,
+            licencia=licencia,
+            estado_deseado=estado,
+            actor_id=user.id,
+            importe_cop=monto,
+            metodo_pago=metodo_pago,
+            nota=nota,
+        )
+    except IngresoError as exc:
+        db.rollback()
+        return _volver(destino, error=str(exc))
+
+    record_event(
+        db,
+        action="ingreso.cuenta_actualizada",
+        user=user,
+        entity_type="licencia",
+        entity_id=licencia.id,
+        detail={
+            "estado_cobro": aplicado,
+            "metodo_pago": metodo_pago,
+            "monto_cop": int(monto) if monto else None,
+        },
+    )
+    db.commit()
+
+    etiqueta = dict(ESTADOS_CUENTA).get(aplicado, aplicado)
+    return _volver(
+        "/ingresos",
+        aviso=f"Cuenta actualizada: {etiqueta.split(' — ')[0]}. "
+        "El cronometro quedo congelado donde corresponde.",
     )

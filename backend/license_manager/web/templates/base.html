@@ -30,7 +30,7 @@
       <li><a href="/" class="{{ 'activo' if seccion == 'panel' else '' }}">Panel</a></li>
       <li><a href="/clientes" class="{{ 'activo' if seccion == 'clientes' else '' }}">Clientes</a></li>
       <li><a href="/equipos" class="{{ 'activo' if seccion == 'equipos' else '' }}">Equipos y licencias</a></li>
-      <li><a href="#" class="{{ 'activo' if seccion == 'ingresos' else '' }}">Ingresos</a></li>
+      <li><a href="/ingresos" class="{{ 'activo' if seccion == 'ingresos' else '' }}">Ingresos</a></li>
       <li><a href="#" class="{{ 'activo' if seccion == 'historial' else '' }}">Historial</a></li>
       {% if current_user.rol in ('owner', 'coowner') %}
       <li><a href="/administradores" class="{{ 'activo' if seccion == 'administradores' else '' }}">Administradores</a></li>

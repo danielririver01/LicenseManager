@@ -207,13 +207,131 @@
     pintar();
   }
 
+  /* --------------------------------------------------------------------- *
+   * Ingresos y ciclo de cobro (UI-07).
+   *
+   * Dos comportamientos, sin ningun script inline (CSP script-src 'self'):
+   * el modal de "Actualizar estado de cuenta" y la confirmacion previa a las
+   * acciones que congelan el cronometro de una cuenta.
+   * --------------------------------------------------------------------- */
+
+  function prepararConfirmaciones() {
+    var botones = document.querySelectorAll("[data-confirmar]");
+    Array.prototype.forEach.call(botones, function (boton) {
+      boton.addEventListener("click", function (evento) {
+        var texto = boton.getAttribute("data-confirmar");
+        if (texto && !window.confirm(texto)) {
+          evento.preventDefault();
+        }
+      });
+    });
+  }
+
+  function prepararModalCuentas() {
+    var modal = document.querySelector("[data-modal-cuenta]");
+    if (!modal) {
+      return;
+    }
+
+    var formulario = modal.querySelector("[data-form-cuenta]");
+    var campoCliente = modal.querySelector("[data-campo-cliente]");
+    var campoEstado = modal.querySelector("[data-campo-estado]");
+    var campoImporte = modal.querySelector("[data-campo-importe]");
+    var campoMetodo = modal.querySelector("[data-campo-metodo]");
+    var campoNota = modal.querySelector("[data-campo-nota]");
+
+    function abrir(datos) {
+      if (formulario && datos.accion) {
+        formulario.setAttribute("action", datos.accion);
+      }
+      if (campoCliente) {
+        campoCliente.value = datos.cliente || "";
+      }
+      if (campoEstado) {
+        campoEstado.value = datos.cobro || "pagado";
+      }
+      if (campoImporte) {
+        campoImporte.value = "";
+      }
+      if (campoMetodo) {
+        campoMetodo.value = "";
+      }
+      if (campoNota) {
+        campoNota.value = "";
+      }
+      modal.classList.remove("oculto");
+      if (campoEstado) {
+        campoEstado.focus();
+      }
+    }
+
+    function cerrar() {
+      modal.classList.add("oculto");
+    }
+
+    var botonesAbrir = document.querySelectorAll("[data-abrir-cuenta]");
+    Array.prototype.forEach.call(botonesAbrir, function (boton) {
+      boton.addEventListener("click", function () {
+        abrir({
+          accion: boton.getAttribute("data-accion"),
+          cliente: boton.getAttribute("data-cliente"),
+          cobro: boton.getAttribute("data-cobro"),
+        });
+      });
+    });
+
+    var botonesCerrar = modal.querySelectorAll("[data-cerrar-cuenta]");
+    Array.prototype.forEach.call(botonesCerrar, function (boton) {
+      boton.addEventListener("click", cerrar);
+    });
+
+    // El modal se cierra tambien al pulsar Escape, sin salir del formulario.
+    document.addEventListener("keydown", function (evento) {
+      if (evento.key === "Escape" && !modal.classList.contains("oculto")) {
+        cerrar();
+      }
+    });
+  }
+
+  /* El importe de un ingreso se admite solo como entero de COP, igual que en
+   * la emision: ``450000`` o ``450.000``. Un decimal se rechaza antes de ir
+   * al servidor para que el operador lo corrija en el momento. */
+  var IMPORTE_VALIDO = /^\d{1,3}(?:[.,]\d{3})*$/;
+
+  function prepararImportes() {
+    var campos = document.querySelectorAll("[data-importe-ingreso]");
+    Array.prototype.forEach.call(campos, function (campo) {
+      var formulario = campo.form;
+      if (!formulario) {
+        return;
+      }
+      formulario.addEventListener("submit", function (evento) {
+        var valor = String(campo.value || "").trim();
+        if (valor && !IMPORTE_VALIDO.test(valor)) {
+          evento.preventDefault();
+          window.alert(
+            "El importe debe ser un numero entero de pesos, sin centavos " +
+              "(por ejemplo 450000 o 450.000)."
+          );
+          campo.focus();
+        }
+      });
+    });
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
       prepararBotones();
       prepararEmision();
+      prepararConfirmaciones();
+      prepararModalCuentas();
+      prepararImportes();
     });
   } else {
     prepararBotones();
     prepararEmision();
+    prepararConfirmaciones();
+    prepararModalCuentas();
+    prepararImportes();
   }
 })();

@@ -21,6 +21,24 @@
     </div>
   </div>
 
+  {% if cuentas_vencidas %}
+  <div class="alerta alerta-error">
+    <strong>Alerta crítica — cuentas vencidas:</strong>
+    {{ cuentas_vencidas }} cuenta{{ 's' if cuentas_vencidas != 1 else '' }}
+    pasó de los 30 días sin confirmación de pago
+    ({{ format_cop(deuda_vencida_cop) }} en vencimiento).
+    El cronómetro quedó detenido hasta que se registre el cobro.
+    <a href="/ingresos">Revisar en Ingresos →</a>
+  </div>
+  {% elif cuentas_pendientes %}
+  <div class="alerta alerta-aviso">
+    <strong>Cobros pendientes:</strong>
+    {{ cuentas_pendientes }} cuenta{{ 's' if cuentas_pendientes != 1 else '' }}
+    en periodo de gracia a partir del día 31 de la prueba.
+    <a href="/ingresos">Gestionar en Ingresos →</a>
+  </div>
+  {% endif %}
+
   <div class="tarjeta">
     <h2>Estado del sistema</h2>
     <p class="pista">

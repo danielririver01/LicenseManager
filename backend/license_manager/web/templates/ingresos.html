@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+{% block titulo %}Ingresos y Cobros · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  <div class="encabezado-pantalla">
+    <div>
+      <h1 class="titulo">Ingresos y Estado de Cuentas (COP)</h1>
+      <p class="subtitulo">
+        Cronómetro automático de 30 días, período de gracia desde el día 31 y
+        congelamiento al cobrar. El pago lo confirma una persona: aquí no hay
+        conciliación bancaria automática.
+      </p>
+    </div>
+    <div class="acciones-cabecera">
+      <a class="btn btn-secundario" href="#tabla-ingresos">Ver movimientos</a>
+      <a class="btn btn-primario" href="#registrar-ingreso">+ Registrar ingreso</a>
+    </div>
+  </div>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  {% for cambio in cambios %}
+  <div class="alerta {{ 'alerta-error' if cambio.hasta == 'vencida' else 'alerta-aviso' }}">
+    {% if cambio.hasta == 'vencida' %}
+      <strong>Alerta crítica — Día {{ 34 if cambio.dias > 34 else cambio.dias }} (cuenta vencida):</strong>
+      {{ cambio.aviso }}
+    {% else %}
+      <strong>Aviso del Día 31 — periodo de prueba finalizado:</strong>
+      {{ cambio.aviso }}
+    {% endif %}
+    Verdulería: <strong>{{ cambio.cliente_nombre or 'Sin verduleria asignada' }}</strong>
+    {% if cambio.hardware_code %}
+      · Equipo <code>{{ format_hardware_code(cambio.hardware_code) }}</code>
+      {% if cambio.equipo_id %}
+      · <a href="/equipos/{{ cambio.equipo_id }}">abrir la ficha →</a>
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <!-- Resumen de recaudación (UI-07) -->
+  <div class="kpis">
+    <div class="kpi">
+      <div class="etiqueta">Ventas cobradas</div>
+      <div class="valor" style="color:var(--verde-activo)">{{ format_cop(resumen.cobradas_cop) }}</div>
+      <div class="pista">{{ resumen.cobradas_n }} ingreso{{ 's' if resumen.cobradas_n != 1 else '' }} pagado{{ 's' if resumen.cobradas_n != 1 else '' }}</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Cobros pendientes</div>
+      <div class="valor" style="color:var(--ambar-alerta)">{{ format_cop(resumen.pendientes_cop) }}</div>
+      <div class="pista">{{ resumen.pendientes_n }} cuenta{{ 's' if resumen.pendientes_n != 1 else '' }} en gracia</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Cuentas vencidas</div>
+      <div class="valor" style="color:var(--rojo-peligro)">{{ resumen.vencidas_n }} cuenta{{ 's' if resumen.vencidas_n != 1 else '' }}</div>
+      <div class="pista">
+        {% if resumen.vencidas_n %}
+        {{ format_cop(resumen.deuda_vencida_cop) }} sin cobrar · cronómetro detenido
+        {% else %}Ninguna cuenta vencida{% endif %}
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Pruebas en curso</div>
+      <div class="valor" style="color:var(--azul-electrico)">{{ resumen.pruebas_activas_n }} activa{{ 's' if resumen.pruebas_activas_n != 1 else '' }}</div>
+      <div class="pista">
+        {% if resumen.pruebas_activas_n %}Cronómetro corriendo
+        {% else %}Ninguna prueba en curso{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Filtros por estado de pago y categoría (doc 02, UI-07) -->
+  <form class="barra-filtros barra-filtros-ancha" method="get" action="/ingresos">
+    <input type="search" name="q" value="{{ busqueda }}"
+           placeholder="Buscar por verduleria, codigo de equipo o nota..."
+           aria-label="Buscar ingreso">
+    <select name="estado" aria-label="Estado de pago">
+      <option value="">— Estado de pago —</option>
+      {% for valor, etiqueta in filtros_estado %}
+      <option value="{{ valor }}" {{ 'selected' if filtro_estado == valor else '' }}>{{ etiqueta }}</option>
+      {% endfor %}
+    </select>
+    <select name="categoria" aria-label="Categoria">
+      <option value="">— Categoria —</option>
+      {% for valor, etiqueta in filtros_categoria %}
+      <option value="{{ valor }}" {{ 'selected' if filtro_categoria == valor else '' }}>{{ etiqueta }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secundario">Aplicar</button>
+    <a class="btn-limpio" href="/ingresos">Limpiar filtros</a>
+    <span class="cuenta-filas">{{ total }} movimiento{{ 's' if total != 1 else '' }}</span>
+  </form>
+
+  <div class="tabla-envoltura" id="tabla-ingresos">
+    <div class="tabla-scroll">
+      <table class="tabla-operadores tabla-ingresos">
+        <thead>
+          <tr>
+            <th>Fecha de registro</th>
+            <th>Verdulería / Negocio</th>
+            <th>Licencia / operación</th>
+            <th>Cronómetro interno</th>
+            <th>Importe (COP)</th>
+            <th>Estado de la cuenta</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fila in filas %}
+          <tr{% if fila.estado_cobro == 'vencida' %} class="fila-titular"{% endif %}>
+            <td>{{ fila.periodo.strftime('%d/%m/%Y') }}
+              <div class="fila-sub">{{ fila.metodo_etiqueta }}</div>
+            </td>
+            <td>
+              <div class="fila-nombre">{{ fila.cliente_nombre }}</div>
+              {% if fila.hardware_code %}
+              <div class="fila-sub"><code>{{ format_hardware_code(fila.hardware_code) }}</code></div>
+              {% endif %}
+            </td>
+            <td>
+              {% if fila.licencia_key %}
+              <div>{{ fila.licencia_tipo or 'Licencia' }}</div>
+              <div class="id-corto">{{ fila.licencia_key }}</div>
+              <div class="fila-sub">{{ fila.categoria_etiqueta }}</div>
+              {% else %}
+              <span class="notilla">Operación sin licencia</span>
+              <div class="fila-sub">{{ fila.categoria_etiqueta }}</div>
+              {% endif %}
+            </td>
+            <td>
+              {% if fila.ciclo %}
+              <span class="cron cron-{{ fila.ciclo.tono }}">{{ fila.ciclo.texto }}</span>
+              <div class="fila-sub">{{ fila.ciclo.detalle }}</div>
+              {% else %}
+              <span class="notilla">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <strong class="monto-cop">{{ format_cop(fila.monto_cop) }}</strong>
+              {% if fila.categoria in ('gratuito', 'reemplazo') %}
+              <div class="fila-sub">Sin cobro por definición</div>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge badge-{{ fila.cuenta_tono }}">{{ fila.cuenta_etiqueta }}</span>
+              {% if fila.pago_nota %}
+              <div class="fila-sub">{{ fila.pago_nota }}</div>
+              {% endif %}
+            </td>
+            <td>
+              {% if fila.puede_cobrar %}
+              <form class="accion-form" method="post" action="/ingresos/{{ fila.licencia_id }}/cuenta">
+                <input type="hidden" name="estado" value="pagado">
+                <button type="submit" class="btn-fila activo"
+                        data-confirmar="Marcar la cuenta de {{ fila.cliente_nombre }} como Pagado? El cronometro se congela definitivamente y la venta se consolida.">
+                  Marcar Pagado
+                </button>
+              </form>
+              {% endif %}
+              {% if fila.licencia_id %}
+              <button type="button" class="btn-fila" data-abrir-cuenta
+                      data-licencia="{{ fila.licencia_id }}"
+                      data-cliente="{{ fila.cliente_nombre }}"
+                      data-cobro="{{ fila.estado_cobro or '' }}"
+                      data-accion="/ingresos/{{ fila.licencia_id }}/cuenta">
+                Editar
+              </button>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="7" style="padding:36px;text-align:center;color:var(--text-muted)">
+              {% if busqueda or filtro_estado or filtro_categoria %}
+              No hay movimientos que coincidan con los filtros aplicados.
+              {% else %}
+              Todavia no hay ingresos que mostrar. Empieza por
+              <strong>+ Registrar ingreso</strong> o emite una licencia.
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Alta manual de ingreso (doc 02, sección 5.3). Formulario visible en vez
+       de modal: el sitio se rinde en el servidor con CSP sin scripts inline. -->
+  <div class="tarjeta" id="registrar-ingreso" style="margin-top:20px">
+    <h2>Registrar ingreso manual</h2>
+    <form method="post" action="/ingresos" data-form-ingreso>
+      <div class="form-grid">
+        <div class="campo">
+          <label for="licencia_id">Licencia / operación *</label>
+          <select id="licencia_id" name="licencia_id" required data-operacion-select>
+            <option value="">— Elige la licencia u operación —</option>
+            {% for op in operaciones %}
+            <option value="{{ op.id }}" {{ 'selected' if alta_licencia == op.id else '' }}>
+              {{ op.etiqueta }}
+            </option>
+            {% endfor %}
+          </select>
+          {% if not operaciones %}
+          <p class="pista">
+            Todavia no hay licencias emitidas. El ingreso se registra contra una
+            licencia existente: emite primero en <strong>Emitir licencia</strong>.
+          </p>
+          {% endif %}
+        </div>
+        <div class="campo">
+          <label for="categoria">Categoría *</label>
+          <select id="categoria" name="categoria" required>
+            {% for valor, etiqueta in categorias_alta %}
+            <option value="{{ valor }}" {{ 'selected' if alta_categoria == valor else '' }}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="importe">Importe cobrado (COP) *</label>
+          <input type="text" id="importe" name="importe" inputmode="numeric"
+                 value="{{ alta_importe }}" placeholder="450.000"
+                 data-importe-ingreso>
+          <p class="pista">Pesos enteros sin centavos. Venta de referencia: {{ format_cop(precio_venta) }}.</p>
+        </div>
+        <div class="campo">
+          <label for="moneda">Moneda</label>
+          <input type="text" id="moneda" value="COP" readonly aria-readonly="true"
+                 style="background:var(--blanco-frio)">
+          <p class="pista">Moneda única del sistema: pesos colombianos enteros.</p>
+        </div>
+        <div class="campo">
+          <label for="estado">Estado de pago *</label>
+          <select id="estado" name="estado" required>
+            {% for valor, etiqueta in filtros_estado %}
+            <option value="{{ valor }}" {{ 'selected' if alta_estado == valor else '' }}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="metodo">Método de pago</label>
+          <select id="metodo" name="metodo">
+            <option value="">— Sin método registrado —</option>
+            {% for valor, etiqueta in metodos %}
+            <option value="{{ valor }}" {{ 'selected' if alta_metodo == valor else '' }}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="nota">Nota o comprobante</label>
+          <input type="text" id="nota" name="nota" maxlength="300" value="{{ alta_nota }}"
+                 placeholder="Ej. Pago por Nequi antes del vencimiento">
+        </div>
+      </div>
+      <p class="pista" style="margin-bottom:14px">
+        Si marcas <strong>Pagado</strong> sobre una cuenta con cronómetro, el
+        contador se congela en ese momento y la venta queda consolidada.
+      </p>
+      <div class="acciones-cabecera">
+        <button type="submit" class="btn btn-primario">Guardar ingreso</button>
+        <a class="btn btn-secundario" href="#registrar-ingreso">Limpiar formulario</a>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal "Actualizar estado de cuenta" (mockup UI-07). Abierto con lm.js:
+       el servidor solo lo deja visible cuando hay que reabrirlo tras un rechazo. -->
+  <div class="modal-cuenta {{ 'oculto' if not cuenta_modal }}"
+       data-modal-cuenta
+       {% if cuenta_modal %}data-reabrir="1"{% endif %}>
+    <div class="modal-caja">
+      <div class="modal-cabecera">
+        <h2>Actualizar estado de cuenta</h2>
+        <button type="button" class="modal-cerrar" data-cerrar-cuenta aria-label="Cerrar">✕</button>
+      </div>
+
+      <form method="post" class="form-cuenta"
+            {% if cuenta_modal %}action="/ingresos/{{ cuenta_modal.id }}/cuenta"{% endif %}
+            data-form-cuenta>
+        <div class="campo">
+          <label for="cuenta_cliente">Verdulería</label>
+          <input type="text" id="cuenta_cliente" readonly
+                 value="{{ cuenta_modal.cliente if cuenta_modal else '' }}"
+                 data-campo-cliente style="background:var(--blanco-frio)">
+        </div>
+        <div class="campo">
+          <label for="cuenta_estado">Estado deseado</label>
+          <select id="cuenta_estado" name="estado" data-campo-estado>
+            {% for valor, etiqueta in estados_cuenta %}
+            <option value="{{ valor }}"
+                    {% if cuenta_modal and cuenta_modal.estado == valor %}selected{% endif %}>
+              {{ etiqueta }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="cuenta_importe">Importe cobrado (COP)</label>
+          <input type="text" id="cuenta_importe" name="importe" inputmode="numeric"
+                 placeholder="450.000" data-campo-importe data-importe-ingreso>
+          <p class="pista">Vacío toma la tarifa de referencia {{ format_cop(precio_venta) }}.</p>
+        </div>
+        <div class="campo">
+          <label for="cuenta_metodo">Método de pago</label>
+          <select id="cuenta_metodo" name="metodo" data-campo-metodo>
+            <option value="">— Sin método registrado —</option>
+            {% for valor, etiqueta in metodos %}
+            <option value="{{ valor }}">{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="campo">
+          <label for="cuenta_nota">Nota o comprobante</label>
+          <input type="text" id="cuenta_nota" name="nota" maxlength="300"
+                 placeholder="Ej. El cliente pagó por Nequi antes del vencimiento" data-campo-nota>
+        </div>
+        <div class="modal-acciones">
+          <button type="button" class="btn btn-secundario" data-cerrar-cuenta>Cancelar</button>
+          <button type="submit" class="btn btn-primario"
+                  data-confirmar="Guardar el cambio de cuenta? Al marcar Pagado el cronometro queda detenido para siempre.">
+            Guardar y detener cronómetro
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

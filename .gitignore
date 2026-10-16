@@ -31,3 +31,6 @@ backend/tests/interop/**/obj/
 # --- Sistema -----------------------------------------------------------------
 .DS_Store
 Thumbs.db
+
+# --- Artefactos de verificacion en navegador ---------------------------------
+.playwright-mcp/

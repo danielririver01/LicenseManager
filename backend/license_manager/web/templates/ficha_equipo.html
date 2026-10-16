@@ -45,10 +45,19 @@
         Emitir licencia para este equipo
       </a>
       {% endif %}
+      {% if ficha.licencia %}
+      <a class="btn btn-primario" href="/ingresos?registrar={{ ficha.licencia.id }}">
+        Registrar ingreso
+      </a>
+      <a class="btn btn-secundario" href="/ingresos?q={{ codigo_formateado }}">
+        Gestionar cobro
+      </a>
+      {% else %}
       <button type="button" class="btn btn-secundario" disabled
-              title="Se habilita con el modulo de Ingresos y Cobros">
+              title="Primero emite la licencia del equipo">
         Gestionar cobro
       </button>
+      {% endif %}
     </div>
   </div>
 
