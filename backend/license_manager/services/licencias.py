@@ -298,17 +298,25 @@ class ClienteOpcion:
     propietario: str | None
 
 
-def listar_clientes_activos(db: Session) -> list[ClienteOpcion]:
+def listar_clientes_activos(
+    db: Session, *, solo_de_usuario_id: str | None = None
+) -> list[ClienteOpcion]:
     """Verdulerias activas en orden alfabetico.
 
     Solo las activas: una verduleria dada de baja no recibe licencias nuevas.
     Sus equipos y sus licencias historicas siguen completos en su ficha.
+
+    ``solo_de_usuario_id`` acota el selector a lo que registro esa persona: un
+    tecnico no puede emitir para la verduleria de otro (JHO-107).
     """
-    clientes = db.execute(
+    query = (
         select(Customer)
         .where(Customer.activo.is_(True))
         .order_by(Customer.nombre.asc())
-    ).scalars()
+    )
+    if solo_de_usuario_id:
+        query = query.where(Customer.creado_por_id == solo_de_usuario_id)
+    clientes = db.execute(query).scalars()
     return [
         ClienteOpcion(id=c.id, nombre=c.nombre, propietario=c.propietario)
         for c in clientes

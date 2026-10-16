@@ -23,11 +23,23 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from license_manager.crypto.frb1 import Frb1Error, normalize_machine_code
-from license_manager.models import Customer, Equipment, License, PaymentStatus, to_utc
+from license_manager.models import Customer, Equipment, License, PaymentStatus, Role, to_utc
 
 
 class DirectoryError(ValueError):
     """Rechazo de negocio con un mensaje pensado para mostrarse en pantalla."""
+
+
+def es_su_registro(creado_por_id: str | None, user) -> bool:  # noqa: ANN001 - User
+    """True si esa persona puede ver y tocar el registro.
+
+    La sociedad (Titular y administradores) ve todo el directorio. El rol
+    Tecnico SOLO accede a lo que el mismo registro: ni las verdulerias ni los
+    equipos de otros tecnicos (JHO-107).
+    """
+    if not Role(user.rol).is_tecnico:
+        return True
+    return creado_por_id == user.id
 
 
 # --------------------------------------------------------------------------- #
@@ -74,8 +86,14 @@ def _estado_comercial_de(licencia: License | None) -> tuple[str, str]:
     return etiqueta, tono
 
 
-def list_customers(db: Session, busqueda: str = "") -> list[CustomerRow]:
+def list_customers(
+    db: Session, busqueda: str = "", *, solo_de_usuario_id: str | None = None
+) -> list[CustomerRow]:
     """Directorio con conteo de equipos y estado comercial.
+
+    ``solo_de_usuario_id`` acota la lista a lo que registro esa persona: es lo
+    que usa el rol Tecnico, que no puede ver las verdulerias de otros tecnicos
+    (JHO-107).
 
     Los tres datos derivados (conteo de equipos, ultima licencia) se resuelven
     con agregados en SQL en vez de una consulta por fila: la tabla puede crecer
@@ -91,6 +109,9 @@ def list_customers(db: Session, busqueda: str = "") -> list[CustomerRow]:
         Customer,
         func.coalesce(equipos_conteo.c.total, 0),
     ).outerjoin(equipos_conteo, equipos_conteo.c.cliente_id == Customer.id)
+
+    if solo_de_usuario_id:
+        query = query.where(Customer.creado_por_id == solo_de_usuario_id)
 
     termino = (busqueda or "").strip()
     if termino:
@@ -207,11 +228,20 @@ def format_cop(monto: int) -> str:
     return f"${int(monto):,}".replace(",", ".") + " COP"
 
 
-def list_equipment(db: Session, busqueda: str = "") -> list[EquipmentRow]:
-    """Inventario completo, con la licencia vigente de cada equipo."""
+def list_equipment(
+    db: Session, busqueda: str = "", *, solo_de_usuario_id: str | None = None
+) -> list[EquipmentRow]:
+    """Inventario con la licencia vigente de cada equipo.
+
+    ``solo_de_usuario_id`` lo acota a los equipos que registro esa persona: el
+    rol Tecnico no ve el inventario de los demas (JHO-107).
+    """
     query = select(Equipment, Customer.nombre).outerjoin(
         Customer, Customer.id == Equipment.cliente_id
     )
+
+    if solo_de_usuario_id:
+        query = query.where(Equipment.creado_por_id == solo_de_usuario_id)
 
     termino = (busqueda or "").strip().upper()
     if termino:

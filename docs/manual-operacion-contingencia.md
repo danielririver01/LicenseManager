@@ -41,9 +41,13 @@ saldo prepago. Se la crea el Titular desde **Mayorista → Dar acceso**.
 * Cada venta le descuenta **un cupo de su paquete** (nada más se le cobra).
 * Ve **su** saldo, **sus** paquetes y **sus** emisiones. No ve a los demás
   técnicos ni el dinero de la sociedad.
+* Puede **recargar sus cupos él mismo** con Mercado Pago (tarjeta, PSE, Nequi o
+  efectivo) y los cupos entran solos al confirmarse el pago. Si esa opción no
+  está configurada, pide el paquete a la sociedad.
 * Puede emitir **venta**, **prueba** y **reemplazo** justificado. **No** puede
   regalar cortesías: esas las autoriza la sociedad.
-* Cuando se queda sin cupos, pide un paquete nuevo. Sin saldo no puede vender.
+* Cuando se queda sin cupos, recarga o pide un paquete nuevo. Sin saldo no puede
+  vender.
 
 Si un técnico se va, se desactiva su cuenta desde **Administradores**: pierde el
 acceso al instante y su historial y sus licencias se conservan.

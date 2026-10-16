@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block titulo %}Recarga de cupos · {{ app_name }}{% endblock %}
+
+{% block cuerpo %}
+<div class="contenedor">
+
+  <div class="migas">
+    <a href="/mayorista">Mi saldo</a>
+    <span>&rsaquo;</span>
+    <span>Recarga</span>
+  </div>
+
+  <div class="encabezado-pantalla">
+    <div>
+      <h1 class="titulo">Estado de tu recarga</h1>
+      <p class="subtitulo">
+        Paquete {{ orden.tipo_paquete }} por {{ format_cop(orden.monto_cop) }} ·
+        creada el {{ orden.creado_at.strftime('%d/%m/%Y %H:%M') }} UTC
+      </p>
+    </div>
+    <span class="badge badge-{{ tono }}" style="font-size:13px">{{ etiqueta }}</span>
+  </div>
+
+  {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
+  {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
+
+  {% if orden.estado == 'aprobado' %}
+  <div class="tarjeta">
+    <h2>¡Listo!</h2>
+    <p class="pista">
+      Tu pago quedó registrado y los cupos ya están en tu saldo.
+      Ahora tienes <strong>{{ saldo }}</strong> cupos disponibles.
+    </p>
+    <p style="margin-top:16px">
+      <a class="btn btn-primario" href="/emitir">Emitir una licencia</a>
+      <a class="btn btn-secundario" href="/mayorista">Ver mi saldo</a>
+    </p>
+  </div>
+
+  {% elif orden.estado == 'revisar' %}
+  <div class="tarjeta">
+    <h2>Tu pago llegó, pero falta un paso</h2>
+    <div class="aviso-reglas">
+      <strong>No te preocupes: tu dinero está registrado.</strong>
+      {{ orden.nota or '' }}
+      <br><br>
+      La sociedad va a revisarlo y acreditarte los cupos. Guarda esta pantalla
+      como comprobante: el pago quedó identificado como
+      <code>{{ orden.mp_payment_id or '—' }}</code>.
+    </div>
+    <p style="margin-top:16px"><a class="btn btn-secundario" href="/mayorista">Volver a mi saldo</a></p>
+  </div>
+
+  {% elif orden.estado in ('rechazado', 'cancelado') %}
+  <div class="tarjeta">
+    <h2>El pago no se completó</h2>
+    <p class="pista">
+      La pasarela respondió: <strong>{{ orden.detalle_pasarela or orden.estado }}</strong>.
+      No se acreditó ningún cupo y no se te cobró nada.
+    </p>
+    <p style="margin-top:16px">
+      <a class="btn btn-primario" href="/mayorista">Intentar de nuevo</a>
+    </p>
+  </div>
+
+  {% else %}
+  <div class="tarjeta">
+    <h2>Estamos esperando la confirmación</h2>
+    <p class="pista">
+      La pasarela todavía no nos avisó que el pago se aprobó. Esto puede tardar
+      unos segundos: vuelve a entrar a esta pantalla en un momento y el estado
+      se actualizará solo.
+    </p>
+    {% if orden.mp_preference_id %}
+    <p class="pista">Referencia del pago: <code>{{ orden.referencia }}</code></p>
+    {% endif %}
+    <p style="margin-top:16px">
+      <a class="btn btn-secundario" href="/mayorista/recarga/{{ orden.id }}">Volver a comprobar</a>
+      <a class="btn btn-secundario" href="/mayorista">Ir a mi saldo</a>
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="aviso-reglas" style="margin-top:20px">
+    <strong>Cómo se protege tu pago:</strong> la confirmación no la da esta
+    pantalla, la da la pasarela. Comprobamos la firma del aviso, consultamos el
+    pago directamente y solo acreditamos si el importe coincide con el paquete.
+    Un pago no puede acreditarse dos veces.
+  </div>
+
+</div>
+{% endblock %}

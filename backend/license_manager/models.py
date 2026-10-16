@@ -396,7 +396,6 @@ class Income(Base):
 
 class Settlement(Base):
     """Liquidacion mensual de comisiones a un administrador operativo."""
-
     __tablename__ = "liquidaciones"
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
@@ -428,9 +427,74 @@ class Settlement(Base):
 
 
 # --------------------------------------------------------------------------- #
-# Auditoria append-only (JHO-105)
+# Ordenes de recarga con pasarela de pago (JHO-108)
 # --------------------------------------------------------------------------- #
 
+
+class EstadoPago(enum.StrEnum):
+    """Estado de una orden de recarga."""
+
+    PENDING = "pendiente"
+    APPROVED = "aprobado"
+    REJECTED = "rechazado"
+    CANCELED = "cancelado"
+    # El dinero llego pero no se pudo acreditar solo (p.ej. ficha desactivada
+    # justo despues de pagar): lo revisa el Titular. Nunca se pierde el rastro.
+    REVIEW = "revisar"
+
+
+class PagoMayorista(Base):
+    """Orden de recarga de un tecnico pagada por pasarela (JHO-108).
+
+    Es el pegamento con la pasarela: ``referencia`` viaja como
+    ``external_reference`` y es lo unico que permite casar un pago con su orden
+    sin confiar en el cuerpo de la notificacion. Los indices unicos sobre
+    ``mp_preference_id``/``mp_payment_id`` hacen imposible acreditar dos veces.
+    """
+
+    __tablename__ = "pagos_mayoristas"
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True, default=lambda: str(uuid4()))
+    referencia: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True, default=lambda: str(uuid4())
+    )
+    tecnico_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("tecnicos.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    tipo_paquete: Mapped[str] = mapped_column(String(24), nullable=False)
+    monto_cop: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    estado: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=EstadoPago.PENDING.value, index=True
+    )
+
+    mp_preference_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    mp_payment_id: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    # status_detail que devuelve la pasarela (para saber POR QUE fallo).
+    detalle_pasarela: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    paquete_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("paquetes_mayoristas.id", ondelete="SET NULL"), nullable=True
+    )
+    nota: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    creado_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    pagado_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "estado IN ('pendiente','aprobado','rechazado','cancelado','revisar')",
+            name="ck_pagos_estado",
+        ),
+        CheckConstraint("monto_cop > 0", name="ck_pagos_monto_positivo"),
+        CheckConstraint(
+            "tipo_paquete IN ('inicial','profesional','master')", name="ck_pagos_tipo"
+        ),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Auditoria append-only (JHO-105)
+# --------------------------------------------------------------------------- #
 
 class AuditEvent(Base):
     """Registro inmutable encadenado por hash.

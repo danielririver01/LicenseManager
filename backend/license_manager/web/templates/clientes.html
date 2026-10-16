@@ -18,6 +18,14 @@
   {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
   {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
 
+  {% if solo_propias %}
+  <div class="aviso-reglas">
+    <strong>Solo aparecen las verdulerías que registraste tú.</strong> El
+    directorio de otros técnicos no forma parte de tu acceso: si necesitas una
+    que no está aquí, regístrala o pídele a la sociedad que la revise.
+  </div>
+  {% endif %}
+
   <form class="barra-filtros" method="get" action="/clientes">
     <input type="search" name="q" value="{{ busqueda }}"
            placeholder="Buscar por nombre de verduleria, propietario o telefono..."

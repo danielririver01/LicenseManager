@@ -18,6 +18,13 @@
   {% if aviso %}<div class="alerta alerta-ok">{{ aviso }}</div>{% endif %}
   {% if error %}<div class="alerta alerta-error">{{ error }}</div>{% endif %}
 
+  {% if solo_propios %}
+  <div class="aviso-reglas">
+    <strong>Solo aparecen los equipos que registraste tú.</strong> El inventario
+    de otros técnicos no forma parte de tu acceso.
+  </div>
+  {% endif %}
+
   <form class="barra-filtros" method="get" action="/equipos">
     <input type="search" name="q" value="{{ busqueda }}"
            placeholder="Buscar por codigo de equipo (16 hex), con o sin guiones, o por verduleria..."

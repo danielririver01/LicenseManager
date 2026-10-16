@@ -57,6 +57,7 @@ from license_manager.services.directory import (
     DirectoryError,
     create_customer,
     create_equipment,
+    es_su_registro,
     format_cop,
     format_hardware_code,
     link_equipment_to_customer,
@@ -130,6 +131,20 @@ from license_manager.services.mayorista import (
     set_tecnico_activo,
     tecnico_de,
     tecnicos_para_emision,
+)
+from license_manager.services.pagos import (
+    EstadoPago,
+    MercadoPago,
+    PagoError,
+    base_publica,
+    conciliar_orden,
+    crear_orden,
+    etiqueta_estado,
+    orden_de,
+    ordenes_de,
+    pasarela_configurada,
+    payload_preferencia,
+    procesar_webhook,
 )
 from license_manager.services.periodos import (
     PeriodoError,
@@ -727,12 +742,18 @@ def _sin_acceso_a_dinero(request: Request, user: User, modulo: str):
 
 @pages_router.get("/clientes", response_class=HTMLResponse)
 def clientes_page(request: Request, db: Session = Depends(get_db_session), q: str = ""):
-    """UI-03 · listado de verdulerias con buscador y estado comercial."""
+    """UI-03 · listado de verdulerias con buscador y estado comercial.
+
+    El rol Tecnico solo ve las que registro el: las verdulerias de otros no son
+    asunto suyo (JHO-107).
+    """
     user, denied = _sesion_o_login(request, db)
     if denied:
         return denied
 
-    clientes = list_customers(db, busqueda=q)
+    # El aislamiento es SOLO para el rol Tecnico: la sociedad ve todo.
+    solo_de = user.id if Role(user.rol).is_tecnico else None
+    clientes = list_customers(db, busqueda=q, solo_de_usuario_id=solo_de)
     return _render(
         request,
         "clientes.html",
@@ -741,6 +762,7 @@ def clientes_page(request: Request, db: Session = Depends(get_db_session), q: st
             "clientes": clientes,
             "busqueda": q.strip(),
             "total": len(clientes),
+            "solo_propias": Role(user.rol).is_tecnico,
             "aviso": request.query_params.get("aviso"),
             "error": request.query_params.get("error"),
         },
@@ -803,6 +825,13 @@ def alternar_cliente(
     customer = db.get(Customer, customer_id)
     if customer is None:
         return _volver("/clientes", error="La verduleria solicitada no existe.")
+    if not es_su_registro(customer.creado_por_id, user):
+        # Un tecnico no puede tocar la verduleria de otro: ni siquiera sabe que
+        # existe (JHO-107).
+        return _volver(
+            "/clientes",
+            error="Esa verduleria no la registraste tú: pídele a la sociedad que la revise.",
+        )
 
     deseado = activo in ("1", "true", "True", "on")
     set_customer_active(db, customer=customer, active=deseado)
@@ -829,14 +858,21 @@ def alternar_cliente(
 
 @pages_router.get("/equipos", response_class=HTMLResponse)
 def equipos_page(request: Request, db: Session = Depends(get_db_session), q: str = ""):
-    """UI-04 · inventario de maquinas con su licencia vigente."""
+    """UI-04 · inventario de maquinas con su licencia vigente.
+
+    El rol Tecnico solo ve los equipos que registro el (JHO-107).
+    """
     user, denied = _sesion_o_login(request, db)
     if denied:
         return denied
 
-    equipos = list_equipment(db, busqueda=q)
+    es_tecnico = Role(user.rol).is_tecnico
+    solo_de = user.id if es_tecnico else None
+    equipos = list_equipment(db, busqueda=q, solo_de_usuario_id=solo_de)
+    # El selector de vinculacion solo ofrece verdulerias que pueda tocar: suyas,
+    # o todas si es de la sociedad.
     clientes_activos = [
-        c for c in list_customers(db) if c.activo
+        c for c in list_customers(db, solo_de_usuario_id=solo_de) if c.activo
     ]
     return _render(
         request,
@@ -847,6 +883,7 @@ def equipos_page(request: Request, db: Session = Depends(get_db_session), q: str
             "clientes": clientes_activos,
             "busqueda": q.strip(),
             "total": len(equipos),
+            "solo_propios": es_tecnico,
             "format_hardware_code": format_hardware_code,
             "aviso": request.query_params.get("aviso"),
             "error": request.query_params.get("error"),
@@ -879,6 +916,16 @@ def crear_equipo(
         db.rollback()
         return _volver("/equipos", error=str(exc))
 
+    # Un tecnico solo registra equipos para SUS verdulerias (JHO-107).
+    if equipo.cliente_id:
+        destino = db.get(Customer, equipo.cliente_id)
+        if destino is None or not es_su_registro(destino.creado_por_id, user):
+            db.rollback()
+            return _volver(
+                "/equipos",
+                error="Solo puedes asignar el equipo a una verduleria que registraste tú.",
+            )
+
     record_event(
         db,
         action="equipo.creado",
@@ -906,6 +953,12 @@ def ficha_equipo_page(request: Request, equipment_id: str, db: Session = Depends
     ficha = load_equipment_file(db, equipment_id)
     if ficha is None:
         return _volver("/equipos", error="El equipo solicitado no existe.")
+    if not es_su_registro(ficha.equipo.creado_por_id, user):
+        # Un tecnico no abre la ficha de un equipo que registro otro (JHO-107).
+        return _volver(
+            "/equipos",
+            error="Ese equipo no lo registraste tú: pídele a la sociedad que lo revise.",
+        )
 
     return _render(
         request,
@@ -915,7 +968,9 @@ def ficha_equipo_page(request: Request, equipment_id: str, db: Session = Depends
             "ficha": ficha,
             "codigo_formateado": format_hardware_code(ficha.equipo.hardware_code),
             "format_cop": format_cop,
-            "clientes": [c for c in list_customers(db) if c.activo],
+            "clientes": [
+                c for c in list_customers(db, solo_de_usuario_id=user.id) if c.activo
+            ],
             "aviso": request.query_params.get("aviso"),
             "error": request.query_params.get("error"),
         },
@@ -937,8 +992,20 @@ def vincular_equipo(
     equipo = db.get(Equipment, equipment_id)
     if equipo is None:
         return _volver("/equipos", error="El equipo solicitado no existe.")
+    if not es_su_registro(equipo.creado_por_id, user):
+        return _volver(
+            "/equipos",
+            error="Ese equipo no lo registraste tú: pídele a la sociedad que lo revise.",
+        )
 
     destino_id = cliente_id.strip() or None
+    if destino_id:
+        destino = db.get(Customer, destino_id)
+        if destino is None or not es_su_registro(destino.creado_por_id, user):
+            return _volver(
+                f"/equipos/{equipment_id}",
+                error="Solo puedes asignar el equipo a una verduleria que registraste tú.",
+            )
     try:
         link_equipment_to_customer(db, equipo=equipo, cliente_id=destino_id)
     except DirectoryError as exc:
@@ -1057,7 +1124,9 @@ def emitir_page(
         {
             "seccion": "equipos",
             "tipos": TIPOS_EMISION,
-            "clientes": listar_clientes_activos(db),
+            "clientes": listar_clientes_activos(
+                db, solo_de_usuario_id=user.id if es_tecnico else None
+            ),
             "cliente_previo": cliente_previo,
             "codigo_sugerido": codigo_sugerido,
             "diagnostico": diagnostico,
@@ -1163,6 +1232,20 @@ def emitir_submit(
                 "licencias a su nombre."
             ),
         )
+
+    # Un tecnico solo emite para SUS verdulerias: no puede firmarle a la
+    # verduleria de otro tecnico (JHO-107). Se comprueba despues de resolver su
+    # ficha, porque sin ficha el problema es otro y el aviso debe decir eso.
+    if Role(user.rol).is_tecnico and cliente_id:
+        propio = db.get(Customer, cliente_id)
+        if propio is None or not es_su_registro(propio.creado_por_id, user):
+            return _volver(
+                destino,
+                error=(
+                    "Esa verdulería no la registraste tú. Registra la tuya en "
+                    "Clientes o pídele a la sociedad que emita para esa."
+                ),
+            )
 
     try:
         # Orden de los rechazos: primero lo que identifica la operacion
@@ -1894,6 +1977,11 @@ def mayorista_page(request: Request, db: Session = Depends(get_db_session), q: s
     if Role(user.rol).is_tecnico:
         propio = tecnico_de_usuario(db, user)
         filas = [fila for fila in listar_tecnicos(db) if propio and fila.id == propio.id]
+        con_pago = pasarela_configurada(state.settings)
+        filas_ordenes = []
+        for orden in ordenes_de(db, propio.id) if propio else []:
+            texto, tono = etiqueta_estado(orden.estado)
+            filas_ordenes.append({"orden": orden, "etiqueta": texto, "tono": tono})
         return _render(
             request,
             "mayorista.html",
@@ -1910,6 +1998,9 @@ def mayorista_page(request: Request, db: Session = Depends(get_db_session), q: s
                 "total": len(filas),
                 "puede_registrar": False,
                 "con_acceso": set(),
+                # Recarga en linea (JHO-108): solo si la pasarela esta configurada.
+                "pagos_disponibles": con_pago,
+                "ordenes": filas_ordenes,
                 "precio_venta": PRECIO_VENTA_COP,
                 "format_cop": format_cop,
                 "format_hardware_code": format_hardware_code,
@@ -1936,6 +2027,8 @@ def mayorista_page(request: Request, db: Session = Depends(get_db_session), q: s
             "puede_registrar": Role(user.rol).is_titular,
             # Tecnicos que ya tienen acceso creado, para ofrecer "Dar acceso".
             "con_acceso": tecnicos_con_acceso(db),
+            "pagos_disponibles": False,
+            "ordenes": [],
             "precio_venta": PRECIO_VENTA_COP,
             "format_cop": format_cop,
             "format_hardware_code": format_hardware_code,
@@ -2134,6 +2227,247 @@ def mayorista_registrar_paquete(
             f"{saldo_tecnico(db, paquete.tecnico_id)} cupos disponibles."
         ),
     )
+
+
+# --------------------------------------------------------------------------- #
+# Recarga del tecnico con pasarela de pago (JHO-108)
+# --------------------------------------------------------------------------- #
+#
+# El tecnico paga su paquete y los cupos entran solos. La seguridad esta en el
+# servicio (firma del aviso, consulta del pago a la pasarela, importe exacto e
+# idempotencia); aqui solo se orquesta y se responde lo que la pasarela espera.
+#
+# Si la pasarela no esta configurada, estas rutas no existen para el usuario y
+# el registro manual del Titular sigue siendo el camino.
+
+
+def _cliente_pasarela(settings) -> MercadoPago:  # noqa: ANN001 - Settings
+    """Cliente real. Las pruebas lo sustituyen por un simulador."""
+    return MercadoPago(
+        token=settings.mp_access_token or "",
+        api_url=settings.mp_api_url,
+    )
+
+
+def _base_publica(request: Request, settings) -> str:  # noqa: ANN001 - Settings
+    return base_publica(settings) or str(request.base_url).rstrip("/")
+
+
+def _tecnico_o_denegado(request: Request, db: Session, *, modulo: str):
+    """Solo el propio tecnico se recarga: la sociedad no le paga a nadie aqui."""
+    user, denied = _sesion_o_login(request, db)
+    if denied:
+        return None, None, denied
+    if not Role(user.rol).is_tecnico:
+        return None, None, _denegar_modulo(
+            request,
+            modulo=modulo,
+            motivo=(
+                "La recarga en linea es para el acceso del Técnico: cada uno paga "
+                "su propio paquete. La sociedad registra las compras en Mayorista."
+            ),
+        )
+    tecnico = tecnico_de_usuario(db, user)
+    if tecnico is None:
+        return user, None, _volver(
+            "/mayorista",
+            error="Tu cuenta de Técnico no está vinculada a una ficha de técnico.",
+        )
+    return user, tecnico, None
+
+
+@pages_router.post("/mayorista/recargar")
+def mayorista_recargar(
+    request: Request,
+    tipo: str = Form(""),
+    db: Session = Depends(get_db_session),
+):
+    """Crea la orden y manda al tecnico al checkout de la pasarela."""
+    user, tecnico, rechazo = _tecnico_o_denegado(request, db, modulo="Recarga en línea")
+    if rechazo:
+        return rechazo
+
+    settings = state.settings
+    if not pasarela_configurada(settings):
+        return _volver(
+            "/mayorista",
+            error="El cobro en línea no está configurado. Pide a la sociedad que registre tu compra.",
+        )
+
+    try:
+        orden = crear_orden(db, tecnico=tecnico, tipo=tipo)
+    except PagoError as exc:
+        db.rollback()
+        return _volver("/mayorista", error=str(exc))
+
+    cliente = _cliente_pasarela(settings)
+    respuesta = cliente.crear_preferencia(
+        payload_preferencia(orden, base_url=_base_publica(request, settings))
+    )
+    if not respuesta.ok or not respuesta.datos:
+        # La orden no se queda colgada: se cancela y se dice por que.
+        orden.estado = EstadoPago.CANCELED.value
+        orden.nota = (respuesta.error or "sin detalle")[:200]
+        record_event(
+            db,
+            action="pago.no_iniciado",
+            user=user,
+            entity_type="pago",
+            entity_id=orden.id,
+            detail={"motivo": orden.nota, "tipo_paquete": orden.tipo_paquete},
+        )
+        db.commit()
+        return _volver(
+            "/mayorista",
+            error="La pasarela no respondió al abrir el pago. Intenta de nuevo en un momento.",
+        )
+
+    orden.mp_preference_id = str(respuesta.datos.get("id") or "")[:64] or None
+    record_event(
+        db,
+        action="pago.orden_creada",
+        user=user,
+        entity_type="pago",
+        entity_id=orden.id,
+        detail={
+            "tipo_paquete": orden.tipo_paquete,
+            "monto_cop": orden.monto_cop,
+            "referencia": orden.referencia,
+            "pasarela": "mercadopago",
+        },
+    )
+    db.commit()
+
+    destino = str(
+        respuesta.datos.get("init_point") or respuesta.datos.get("sandbox_init_point") or ""
+    )
+    if not destino.startswith("https://"):
+        return _volver("/mayorista", error="La pasarela no devolvió un enlace de pago válido.")
+    return RedirectResponse(destino, status_code=303)
+
+
+@pages_router.get("/mayorista/recarga/{orden_id}", response_class=HTMLResponse)
+def mayorista_recarga_estado(
+    request: Request, orden_id: str, db: Session = Depends(get_db_session)
+):
+    """A donde vuelve el tecnico desde la pasarela.
+
+    Si la orden sigue pendiente se CONCILIA contra la pasarela: si el pago se
+    aprobo y el aviso no llego, el tecnico queda acreditado igual.
+    """
+    user, tecnico, rechazo = _tecnico_o_denegado(request, db, modulo="Recarga en línea")
+    if rechazo:
+        return rechazo
+
+    orden = orden_de(db, orden_id)
+    if orden is None or orden.tecnico_id != tecnico.id:
+        return _volver("/mayorista", error="La orden indicada no existe.")
+
+    aviso = request.query_params.get("aviso")
+    error = request.query_params.get("error")
+    settings = state.settings
+
+    if orden.estado == EstadoPago.PENDING.value and pasarela_configurada(settings):
+        resultado = conciliar_orden(
+            db, orden=orden, cliente=_cliente_pasarela(settings), settings=settings
+        )
+        if resultado.etiqueta == "orden_aprobado":
+            record_event(
+                db,
+                action="pago.confirmado",
+                user=user,
+                entity_type="pago",
+                entity_id=orden.id,
+                detail={
+                    "referencia": orden.referencia,
+                    "tipo_paquete": orden.tipo_paquete,
+                    "monto_cop": orden.monto_cop,
+                    "mp_payment_id": orden.mp_payment_id,
+                    "via": "conciliacion",
+                },
+            )
+            aviso = (
+                f"¡Pago confirmado! Se acreditaron "
+                f"{saldo_tecnico(db, tecnico.id)} cupos a tu saldo."
+            )
+            db.commit()
+        elif resultado.etiqueta == "rechazado":
+            db.rollback()
+            error = resultado.detalle
+
+    etiqueta, tono = etiqueta_estado(orden.estado)
+    return _render(
+        request,
+        "recarga_estado.html",
+        {
+            "seccion": "mayorista",
+            "orden": orden,
+            "etiqueta": etiqueta,
+            "tono": tono,
+            "saldo": saldo_tecnico(db, tecnico.id),
+            "paquetes": listar_paquetes(db, tecnico_id=tecnico.id),
+            "format_cop": format_cop,
+            "pagos_disponibles": pasarela_configurada(settings),
+            "aviso": aviso,
+            "error": error,
+        },
+    )
+
+
+@pages_router.post("/webhooks/mercadopago")
+async def webhook_mercadopago(request: Request, db: Session = Depends(get_db_session)):
+    """Aviso de la pasarela. Ruta PUBLICA: la firma es el unico portero.
+
+    Va en ``pages_router`` (sin el prefijo ``/api``) porque la direccion la fija
+    la pasarela al configurar el webhook y debe coincidir con la que mandamos en
+    ``notification_url``: ``/webhooks/mercadopago``.
+
+    Respuestas: 200 cuando ya se decidio algo (para que la pasarela deje de
+    reintentar), 401 si la firma no es valida y 500 si la pasarela no nos
+    contesto (asi el aviso se reintenta).
+    """
+    settings = state.settings
+    if not pasarela_configurada(settings):
+        return JSONResponse(status_code=404, content={"detail": "Sin configurar."})
+
+    data_id = request.query_params.get("data.id") or request.query_params.get("id")
+    tipo_evento = request.query_params.get("type") or ""
+    x_signature = request.headers.get("x-signature")
+    x_request_id = request.headers.get("x-request-id")
+
+    # Solo los pagos interesan: el resto se acepta y se ignora.
+    if tipo_evento and tipo_evento != "payment":
+        return JSONResponse(status_code=200, content={"ok": True, "ignorado": tipo_evento})
+
+    resultado = procesar_webhook(
+        db,
+        data_id=data_id,
+        x_signature=x_signature,
+        x_request_id=x_request_id,
+        cliente=_cliente_pasarela(settings),
+        settings=settings,
+    )
+
+    record_event(
+        db,
+        action="pago.webhook",
+        # Sin usuario: el aviso viene de la pasarela, no de una persona.
+        user=None,
+        entity_type="pago" if resultado.orden else None,
+        entity_id=resultado.orden.id if resultado.orden else None,
+        detail={
+            "resultado": resultado.etiqueta,
+            "detalle": resultado.detalle[:200],
+            "tipo": "payment",
+        },
+    )
+    db.commit()
+
+    if resultado.etiqueta == "firma_invalida":
+        return JSONResponse(status_code=401, content={"detail": "Firma invalida."})
+    if resultado.etiqueta == "consulta_fallida":
+        return JSONResponse(status_code=500, content={"detail": "Pasarela no disponible."})
+    return JSONResponse(status_code=200, content={"ok": True, "resultado": resultado.etiqueta})
 
 
 # --------------------------------------------------------------------------- #

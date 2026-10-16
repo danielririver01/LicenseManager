@@ -194,6 +194,77 @@ debe decir *"Íntegra"*. Si dice "Rota", no sigas: avisa al Titular Principal.
 
 ---
 
+## 7. Cobro en línea de los técnicos (Mercado Pago)
+
+El técnico puede **recargar sus cupos solo** con tarjeta, PSE, Nequi o efectivo
+(Efecty) desde su panel. Sin configurar esto, la función queda oculta y sigue
+valiendo el registro manual del Titular.
+
+### 7.1 En Mercado Pago
+
+1. Entra a [Tus integraciones](https://www.mercadopago.com.co/developers/panel/app)
+   y **crea una aplicación** (nombre: `License Manager`). Modo de negocio: pagos
+   online.
+2. Copia el **Access Token**. Tendrás dos (pruebas y producción): empieza por el
+   de pruebas.
+3. En la misma aplicación: **Webhooks → Configurar notificaciones**.
+   * URL de producción: `https://tu-dominio.com/webhooks/mercadopago?source_news=webhooks`
+   * URL de pruebas: la misma mientras es una sola instalación.
+   * Marca **solo el evento "Pagos"** (`payment`).
+   * Guarda y **revela la clave secreta**: es `LM_MP_WEBHOOK_SECRET`.
+4. Copia esas dos claves al archivo de entorno del servidor:
+
+```bash
+sudo nano /etc/license-manager/license-manager.env
+#   LM_MP_ACCESS_TOKEN=...        (empieza con TEST- para pruebas)
+#   LM_MP_WEBHOOK_SECRET=...
+#   LM_MP_PRODUCTION=false        (true cuando uses el token productivo)
+#   LM_MP_BASE_URL=https://tu-dominio.com
+sudo systemctl restart license-manager
+```
+
+> El token y el secreto son **secretos del servidor**, como la llave privada:
+> nunca al repositorio, nunca al correo. `LM_MP_PRODUCTION` es la red que impide
+> acreditar un pago de pruebas en producción (y al revés).
+
+### 7.2 Probarlo
+
+Con el token de **pruebas** (`LM_MP_PRODUCTION=false`):
+
+1. Entra como técnico → **Mayorista → Recargar mis cupos → Pagar ahora**.
+2. Paga con una [tarjeta de prueba](https://www.mercadopago.com.co/developers/es/docs/your-integrations/test/cards)
+   (por ejemplo `APRO` para aprobado, `OTHE` para rechazado).
+3. Vuelves a la pantalla de la orden: debe decir **"¡Pago confirmado!"** y tu
+   saldo debe subir. El pago queda en el Historial como `pago.webhook`.
+
+En Mercado Pago también puedes usar **Webhooks → Simular** para mandar un aviso
+de prueba a tu URL y ver la respuesta.
+
+### 7.3 Qué protege nuestro lado (no hay que configurarlo, ya está)
+
+* Se **valida la firma** HMAC-SHA256 de cada aviso: sin firma válida se responde
+  401 y no se toca nada.
+* El aviso solo trae un `data.id`: el **estado y el importe se consultan** a la
+  API con el token del servidor. **Nunca** se acredita con lo que venga en el
+  cuerpo del aviso.
+* Se exige que el importe **coincida exactamente** con el paquete y que el pago
+  **no se haya usado antes** (índices únicos).
+* Si el aviso no llega, la pantalla de retorno **concilia**: consulta los pagos
+  de la orden y acredita igual.
+* Si el técnico pagó pero su ficha estaba desactivada, **no se pierde**: la orden
+  queda marcada **"Pagado · por revisar"** y aparece en su panel para que el
+  Titular lo resuelva.
+
+### 7.4 Comisión de la pasarela
+
+Mercado Pago cobra su comisión (alrededor del 3,5%). El ingreso que registra el
+sistema es el **valor del paquete que pagó el técnico**; la comisión es un costo
+financiero que verás en el reporte de Mercado Pago. Si quieres que quede anotada
+en la caja del sistema, el camino es un ingreso de categoría "anulación" con el
+valor de la comisión.
+
+---
+
 ## 8. Verificación desde el celular y el escritorio (checklist de salida)
 
 1. Abre `https://license-manager.tu-dominio.com` en el celular (datos móviles,

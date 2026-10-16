@@ -35,7 +35,31 @@
   {% endif %}
 
   <!-- KPI del modelo mayorista (doc 04 v2.1, secciones 3 y 5) -->
+  <!-- KPI del modelo mayorista. Para el TECNICO todo va acotado a el y con sus
+       palabras ("lo que has pagado"): nunca ve el dinero de los demas. -->
   <div class="kpis">
+    {% if es_tecnico %}
+    <div class="kpi">
+      <div class="etiqueta">Cupos que compraste</div>
+      <div class="valor">{{ resumen.cupos_vendidos }}</div>
+      <div class="pista">En {{ paquetes|length }} paquete{{ 's' if paquetes|length != 1 else '' }}</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Cupos disponibles</div>
+      <div class="valor" style="color:var(--verde-activo)">{{ resumen.cupos_disponibles }}</div>
+      <div class="pista">Listos para vender</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Cupos usados</div>
+      <div class="valor" style="color:var(--azul-electrico)">{{ resumen.cupos_usados }}</div>
+      <div class="pista">Emisiones tuyas que los descontaron</div>
+    </div>
+    <div class="kpi">
+      <div class="etiqueta">Lo que has pagado</div>
+      <div class="valor" style="color:var(--azul-noche)">{{ format_cop(resumen.recaudado_cop) }}</div>
+      <div class="pista">Tus compras por adelantado</div>
+    </div>
+    {% else %}
     <div class="kpi">
       <div class="etiqueta">Técnicos activos</div>
       <div class="valor">{{ resumen.tecnicos_activos_n }}</div>
@@ -52,10 +76,11 @@
       <div class="pista">Emisiones comerciales descontadas</div>
     </div>
     <div class="kpi">
-      <div class="etiqueta">Recaudado mayorista</div>
+      <div class="etiqueta">Recaudado mayorista (sociedad)</div>
       <div class="valor" style="color:var(--azul-noche)">{{ format_cop(resumen.recaudado_cop) }}</div>
-      <div class="pista">Cobrado por adelantado a los técnicos</div>
+      <div class="pista">Total cobrado a todos los técnicos</div>
     </div>
+    {% endif %}
   </div>
 
   <div class="rejilla-ficha">
@@ -70,10 +95,87 @@
         </div>
       </div>
       <p class="pista" style="margin-top:14px">
+        {% if pagos_disponibles %}
+        Puedes recargar tú mismo con tarjeta, PSE, Nequi o efectivo: los cupos
+        entran a tu saldo apenas se confirma el pago.
+        {% else %}
         El saldo lo carga la sociedad cuando le pagas un paquete. Si necesitas
         más cupos, pídele al Titular que registre la compra.
+        {% endif %}
       </p>
     </div>
+
+    {% if pagos_disponibles %}
+    <!-- Recarga en linea (JHO-108): el tecnico paga y los cupos entran solos. -->
+    <div class="tarjeta">
+      <h2>Recargar mis cupos</h2>
+      <p class="pista" style="margin-bottom:14px">
+        Elige el paquete: te lleva a la pasarela de pago y, al confirmarse, los
+        cupos aparecen en tu saldo sin que nadie más intervenga.
+      </p>
+      <div class="tabla-scroll">
+        <table class="tabla-operadores">
+          <thead>
+            <tr>
+              <th>Paquete</th>
+              <th>Cupos</th>
+              <th>Precio</th>
+              <th>Por licencia</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tp in tipos_paquete %}
+            <tr>
+              <td><div class="fila-nombre">{{ tp.etiqueta }}</div></td>
+              <td>{{ tp.licencias }}</td>
+              <td><strong class="monto-cop">{{ format_cop(tp.valor_total_cop) }}</strong></td>
+              <td>{{ format_cop(tp.costo_unitario_cop) }} <span class="fila-sub">te sale a</span></td>
+              <td>
+                <form class="accion-form" method="post" action="/mayorista/recargar">
+                  <input type="hidden" name="tipo" value="{{ tp.valor }}">
+                  <button type="submit" class="btn-fila activo"
+                          data-confirmar="Vas a pagar {{ format_cop(tp.valor_total_cop) }} por {{ tp.licencias }} cupos. Te llevamos a la pasarela de pago. ¿Continuar?">
+                    Pagar ahora
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="pista" style="margin-top:12px">
+        El pago lo procesa la pasarela: este servidor nunca ve los datos de tu
+        tarjeta. Si el pago se aprueba y por algo no se acredita, queda
+        registrado y la sociedad lo resuelve.
+      </p>
+    </div>
+    {% endif %}
+
+    {% if ordenes %}
+    <div class="tarjeta">
+      <h2>Mis últimas recargas</h2>
+      <div class="tabla-scroll">
+        <table class="tabla-operadores">
+          <thead>
+            <tr><th>Fecha</th><th>Paquete</th><th>Importe</th><th>Estado</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for fila in ordenes %}
+            <tr>
+              <td>{{ fila.orden.creado_at.strftime('%d/%m/%Y %H:%M') }}</td>
+              <td>{{ fila.orden.tipo_paquete }}</td>
+              <td><span class="monto-cop">{{ format_cop(fila.orden.monto_cop) }}</span></td>
+              <td><span class="badge badge-{{ fila.tono }}">{{ fila.etiqueta }}</span></td>
+              <td><a class="btn-limpio" href="/mayorista/recarga/{{ fila.orden.id }}">Ver</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
     {% else %}
     <!-- Alta de técnico: la registran los tres roles, como las verdulerías. -->
     <div class="tarjeta">
@@ -320,6 +422,9 @@
     paquete más antiguo con saldo. Un reemplazo por daño de la máquina va a
     $ 0 COP y no descuenta cupo (esa licencia ya estaba pagada); una caja
     adicional sí consume cupo. Sin saldo no puedes emitir ventas.
+    {% if pagos_disponibles %}
+    Puedes recargar tú mismo con Mercado Pago desde esta misma pantalla.
+    {% endif %}
     {% else %}
     <strong>Reglas del modelo mayorista:</strong> el técnico compra cupos por
     adelantado y la sociedad cobra el paquete completo en ese momento; cada

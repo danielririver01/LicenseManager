@@ -18,7 +18,15 @@ import pytest
 from conftest import crear_titular, crear_usuario_rol, iniciar_sesion
 from sqlalchemy import func, select
 
-from license_manager.models import Income, License, Role, Technician, User, WholesalePackage
+from license_manager.models import (
+    Equipment,
+    Income,
+    License,
+    Role,
+    Technician,
+    User,
+    WholesalePackage,
+)
 from license_manager.services.audit import verify_chain
 from license_manager.services.directory import create_customer, create_equipment
 from license_manager.services.mayorista import saldo_tecnico
@@ -86,8 +94,13 @@ def _paquete(db, tecnico: Technician, tipo: str = "inicial") -> WholesalePackage
     return paquete
 
 
-def _cliente(db) -> str:
-    cliente = create_customer(db, actor_id=None, nombre=CLIENTE)
+def _cliente(db, de_usuario_id: str | None = None, nombre: str = CLIENTE) -> str:
+    """Verduleria de prueba. ``de_usuario_id`` la deja a nombre de esa persona.
+
+    Hace falta porque un tecnico solo ve y toca SUS verdulerias: una sin dueno
+    (actor None) es invisible para el (JHO-107).
+    """
+    cliente = create_customer(db, actor_id=de_usuario_id, nombre=nombre)
     db.commit()
     return cliente.id
 
@@ -211,8 +224,8 @@ def test_la_pantalla_ofrece_dar_acceso_solo_si_falta(client, db_session):
 def test_el_tecnico_emite_con_su_propio_cupo(client, db_session):
     tecnico = _tecnico(db_session)
     _paquete(db_session, tecnico, "inicial")
-    _entrada_tecnico(client, db_session, tecnico)
-    cliente_id = _cliente(db_session)
+    cuenta = _entrada_tecnico(client, db_session, tecnico)
+    cliente_id = _cliente(db_session, cuenta.id)
 
     respuesta = _emitir(client, cliente_id, CODIGOS[0])
 
@@ -235,8 +248,8 @@ def test_el_tecnico_emite_con_su_propio_cupo(client, db_session):
 def test_el_tecnico_no_elige_tecnico_en_la_pantalla(client, db_session):
     tecnico = _tecnico(db_session)
     _paquete(db_session, tecnico, "inicial")
-    _entrada_tecnico(client, db_session, tecnico)
-    _cliente(db_session)  # el formulario solo se pinta si hay verdulerias
+    cuenta = _entrada_tecnico(client, db_session, tecnico)
+    _cliente(db_session, cuenta.id)  # el formulario solo se pinta si hay verdulerias
 
     cuerpo = client.get("/emitir").text
 
@@ -255,8 +268,9 @@ def test_no_puede_gastar_el_cupo_de_otro_tecnico(client, db_session):
     ajeno = _tecnico(db_session, "Andrea Restrepo")
     _paquete(db_session, propio, "inicial")
     _paquete(db_session, ajeno, "master")
-    _entrada_tecnico(client, db_session, propio)
-    cliente_id = _cliente(db_session)
+    cuenta = _entrada_tecnico(client, db_session, propio)
+    # La verduleria es del tecnico que emite.
+    cliente_id = _cliente(db_session, cuenta.id)
 
     _emitir(client, cliente_id, CODIGOS[0], tecnico_id=ajeno.id)
 
@@ -268,8 +282,8 @@ def test_no_puede_gastar_el_cupo_de_otro_tecnico(client, db_session):
 
 def test_sin_saldo_el_tecnico_no_puede_vender(client, db_session):
     tecnico = _tecnico(db_session)
-    _entrada_tecnico(client, db_session, tecnico)
-    cliente_id = _cliente(db_session)
+    cuenta = _entrada_tecnico(client, db_session, tecnico)
+    cliente_id = _cliente(db_session, cuenta.id)
 
     respuesta = _emitir(client, cliente_id, CODIGOS[0])
 
@@ -281,8 +295,8 @@ def test_sin_saldo_el_tecnico_no_puede_vender(client, db_session):
 def test_el_tecnico_puede_dar_prueba_y_reemplazo_sin_cupo(client, db_session):
     tecnico = _tecnico(db_session)
     _paquete(db_session, tecnico, "inicial")
-    _entrada_tecnico(client, db_session, tecnico)
-    cliente_id = _cliente(db_session)
+    cuenta = _entrada_tecnico(client, db_session, tecnico)
+    cliente_id = _cliente(db_session, cuenta.id)
 
     _emitir(client, cliente_id, CODIGOS[0], tipo="prueba", importe="0")
     _emitir(
@@ -303,8 +317,8 @@ def test_el_tecnico_puede_dar_prueba_y_reemplazo_sin_cupo(client, db_session):
 def test_el_tecnico_no_puede_regalar_cortesias(client, db_session):
     tecnico = _tecnico(db_session)
     _paquete(db_session, tecnico, "inicial")
-    _entrada_tecnico(client, db_session, tecnico)
-    cliente_id = _cliente(db_session)
+    cuenta = _entrada_tecnico(client, db_session, tecnico)
+    cliente_id = _cliente(db_session, cuenta.id)
 
     respuesta = _emitir(client, cliente_id, CODIGOS[0], tipo="cortesia", importe="0")
 
@@ -321,18 +335,18 @@ def test_una_cuenta_de_tecnico_sin_ficha_no_puede_emitir(client, db_session):
     from license_manager.security.passwords import hash_password
 
     crear_titular(db_session)
-    db_session.add(
-        User(
-            nombre_completo="Sin ficha",
-            email="sinficha@balanzas.co",
-            password_hash=hash_password(CLAVE_TECNICO),
-            rol=Role.TECNICO.value,
-            activo=True,
-        )
+    cuenta_sin_ficha = User(
+        nombre_completo="Sin ficha",
+        email="sinficha@balanzas.co",
+        password_hash=hash_password(CLAVE_TECNICO),
+        rol=Role.TECNICO.value,
+        activo=True,
     )
+    db_session.add(cuenta_sin_ficha)
     db_session.commit()
     iniciar_sesion(client, "sinficha@balanzas.co", CLAVE_TECNICO)
-    cliente_id = _cliente(db_session)
+    # Su propia verduleria: lo que falta es la ficha, no el permiso sobre ella.
+    cliente_id = _cliente(db_session, cuenta_sin_ficha.id)
 
     respuesta = _emitir(client, cliente_id, CODIGOS[0])
 
@@ -467,9 +481,9 @@ def test_el_panel_del_tecnico_no_muestra_el_dinero_de_la_sociedad(client, db_ses
 def test_el_tecnico_ve_sus_ultimas_emisiones_sin_dinero(client, db_session):
     tecnico = _tecnico(db_session)
     _paquete(db_session, tecnico, "inicial")
-    cliente_id = _cliente(db_session)
+    cuenta = _entrada_tecnico(client, db_session, tecnico)
+    cliente_id = _cliente(db_session, cuenta.id)
     _equipo(db_session, CODIGOS[0], cliente_id)
-    _entrada_tecnico(client, db_session, tecnico)
     _emitir(client, cliente_id, CODIGOS[0])
 
     cuerpo = client.get("/").text
@@ -517,7 +531,140 @@ def test_el_tecnico_si_puede_trabajar_en_la_calle(client, db_session):
 
 
 # --------------------------------------------------------------------------- #
-# 5. La sociedad sigue igual
+# 5. Aislamiento: cada tecnico solo ve y toca LO SUYO
+# --------------------------------------------------------------------------- #
+
+
+def _con_equipo(db, de_usuario_id: str, codigo: str, nombre: str = CLIENTE) -> tuple[str, str]:
+    """Verduleria de esa persona con un equipo suyo. Devuelve (cliente, equipo)."""
+    cliente_id = _cliente(db, de_usuario_id, nombre)
+    _equipo(db, codigo, cliente_id)
+    equipo = db.execute(
+        select(Equipment).where(Equipment.hardware_code == codigo)
+    ).scalar_one()
+    return cliente_id, equipo.id
+
+
+def test_el_tecnico_solo_ve_sus_verdulerias(client, db_session):
+    propio = _tecnico(db_session, "Carlos Balanzas")
+    ajeno = _tecnico(db_session, "Andrea Restrepo")
+    cuenta_propio = _entrada_tecnico(client, db_session, propio)
+    cuenta_ajeno = _acceso(db_session, ajeno, email="andrea@balanzas.co")
+    _cliente(db_session, cuenta_propio.id)
+    ajena = create_customer(db_session, actor_id=cuenta_ajeno.id, nombre="Verduleria De Otro")
+    db_session.commit()
+
+    cuerpo = client.get("/clientes").text
+
+    assert CLIENTE in cuerpo
+    assert ajena.nombre not in cuerpo, "no debe ver la verduleria de otro tecnico"
+    assert "Solo aparecen las verdulerías que registraste tú" in cuerpo
+
+
+def test_el_tecnico_no_puede_desactivar_la_verduleria_de_otro(client, db_session):
+    """Ni siquiera deberia saber que existe; y si lo intenta, no pasa nada."""
+    propio = _tecnico(db_session, "Carlos Balanzas")
+    ajeno = _tecnico(db_session, "Andrea Restrepo")
+    _entrada_tecnico(client, db_session, propio)
+    cuenta_ajeno = _acceso(db_session, ajeno, email="andrea@balanzas.co")
+    ajena = create_customer(db_session, actor_id=cuenta_ajeno.id, nombre="Verduleria De Otro")
+    db_session.commit()
+
+    respuesta = client.post(
+        f"/clientes/{ajena.id}/alternar", data={"activo": "0"}, follow_redirects=False
+    )
+
+    assert "no la registraste tú" in _ubicacion(respuesta)
+    db_session.refresh(ajena)
+    assert ajena.activo is True, "la verduleria de otro sigue intacta"
+
+
+def test_el_tecnico_solo_ve_sus_equipos(client, db_session):
+    propio = _tecnico(db_session, "Carlos Balanzas")
+    ajeno = _tecnico(db_session, "Andrea Restrepo")
+    cuenta_propio = _entrada_tecnico(client, db_session, propio)
+    cuenta_ajeno = _acceso(db_session, ajeno, email="andrea@balanzas.co")
+    _con_equipo(db_session, cuenta_propio.id, CODIGOS[0], "Verduleria Mia")
+    _con_equipo(db_session, cuenta_ajeno.id, CODIGOS[1], "Verduleria Ajena")
+
+    cuerpo = client.get("/equipos").text
+
+    assert "A4B9-C102-E8F3-7B1A" in cuerpo
+    assert "5D21-98AF-44B1-0C3E" not in cuerpo, "no debe ver inventario de otro tecnico"
+    assert "Solo aparecen los equipos que registraste tú" in cuerpo
+
+
+def test_el_tecnico_no_abre_la_ficha_de_un_equipo_ajeno(client, db_session):
+    propio = _tecnico(db_session, "Carlos Balanzas")
+    ajeno = _tecnico(db_session, "Andrea Restrepo")
+    _entrada_tecnico(client, db_session, propio)
+    cuenta_ajeno = _acceso(db_session, ajeno, email="andrea@balanzas.co")
+    _, equipo_ajeno = _con_equipo(db_session, cuenta_ajeno.id, CODIGOS[1])
+
+    respuesta = client.get(f"/equipos/{equipo_ajeno}", follow_redirects=False)
+
+    assert "no lo registraste tú" in _ubicacion(respuesta)
+
+
+def test_el_tecnico_no_emite_para_una_verduleria_ajena(client, db_session):
+    """Aunque mande el id a mano, el servidor lo rechaza."""
+    propio = _tecnico(db_session, "Carlos Balanzas")
+    ajeno = _tecnico(db_session, "Andrea Restrepo")
+    _paquete(db_session, propio, "inicial")
+    _entrada_tecnico(client, db_session, propio)
+    cuenta_ajeno = _acceso(db_session, ajeno, email="andrea@balanzas.co")
+    ajena = create_customer(db_session, actor_id=cuenta_ajeno.id, nombre="Verduleria De Otro")
+    db_session.commit()
+
+    respuesta = _emitir(client, ajena.id, CODIGOS[0])
+
+    assert "no la registraste tú" in _ubicacion(respuesta)
+    assert db_session.execute(select(func.count(License.id))).scalar_one() == 0
+    assert saldo_tecnico(db_session, propio.id) == 3, "tampoco se le descuenta el cupo"
+
+
+def test_el_tecnico_no_ve_el_dinero_de_otros_en_mayorista(client, db_session):
+    """El KPI de Mayorista es SU dinero: nunca el total de la sociedad."""
+    propio = _tecnico(db_session, "Carlos Balanzas")
+    ajeno = _tecnico(db_session, "Andrea Restrepo")
+    _paquete(db_session, propio, "inicial")       # $960.000
+    _paquete(db_session, ajeno, "master")         # $2.600.000
+    _entrada_tecnico(client, db_session, propio)
+
+    cuerpo = client.get("/mayorista").text
+
+    assert "Lo que has pagado" in cuerpo
+    assert "$960.000" in cuerpo
+    assert "$2.600.000" not in cuerpo, "el dinero de otro tecnico no se muestra"
+    # Y nada que suene al total de la sociedad.
+    assert "Recaudado mayorista" not in cuerpo
+    assert "Técnicos activos" not in cuerpo
+
+
+def test_la_sociedad_sigue_viendo_todo(client, db_session):
+    """Control: el Titular no queda limitado por el aislamiento."""
+    propio = _tecnico(db_session, "Carlos Balanzas")
+    ajeno = _tecnico(db_session, "Andrea Restrepo")
+    cuenta_propio = _acceso(db_session, propio, email="carlos@balanzas.co")
+    cuenta_ajeno = _acceso(db_session, ajeno, email="andrea@balanzas.co")
+    _con_equipo(db_session, cuenta_propio.id, CODIGOS[0], "Verduleria Mia")
+    _, equipo_ajeno = _con_equipo(db_session, cuenta_ajeno.id, CODIGOS[1], "Verduleria Ajena")
+
+    # _acceso ya creo al titular (con la clave de las pruebas): solo entra.
+    iniciar_sesion(client, "titular@frubber.co", CLAVE_TITULAR)
+
+    clientes = client.get("/clientes").text
+    equipos = client.get("/equipos").text
+
+    assert "Verduleria Mia" in clientes
+    assert "Verduleria Ajena" in clientes
+    assert "5D21-98AF-44B1-0C3E" in equipos
+    assert "A4B9-C102-E8F3-7B1A" in equipos
+    assert client.get(f"/equipos/{equipo_ajeno}").status_code == 200
+
+
+# --------------------------------------------------------------------------- #
+# 6. La sociedad sigue igual
 # --------------------------------------------------------------------------- #
 
 

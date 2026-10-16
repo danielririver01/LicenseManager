@@ -61,6 +61,19 @@ class Settings(BaseSettings):
     backup_keep: int = 14
     backup_upload: str | None = None
 
+    # --- Cobro online con pasarela (JHO-108) ---------------------------------
+    # El token de acceso es SECRETO DEL SERVIDOR, igual que la llave privada:
+    # nunca al navegador ni al repositorio.
+    mp_access_token: str | None = None
+    # Secreto de la aplicacion para validar la firma de los webhooks.
+    mp_webhook_secret: str | None = None
+    # True cuando el token es productivo: no se acredita un pago de pruebas.
+    mp_production: bool = True
+    # URL publica del sitio: la usan los retornos y la notificacion.
+    mp_base_url: str = ""
+    # Direccion de la API (se cambia en las pruebas con un simulador).
+    mp_api_url: str = "https://api.mercadopago.com"
+
 
 @lru_cache
 def get_settings() -> Settings:
